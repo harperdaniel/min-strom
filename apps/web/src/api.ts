@@ -16,8 +16,10 @@ const env = import.meta.env as Record<string, unknown>;
 const apiBaseUrlFromEnv = env["VITE_API_BASE_URL"];
 const API_BASE_URL =
   typeof apiBaseUrlFromEnv === "string" && apiBaseUrlFromEnv.length > 0
-    ? apiBaseUrlFromEnv
-    : "http://localhost:3000";
+    ? apiBaseUrlFromEnv.replace(/\/$/, "")
+    : import.meta.env.PROD
+      ? ""
+      : "http://localhost:3000";
 
 export async function fetchDashboard(): Promise<DashboardSummaryResponse> {
   const response = await fetch(API_BASE_URL + "/api/dashboard", {

@@ -311,7 +311,7 @@ function ConnectPage({ navigate }: { navigate: (route: Route) => void }) {
   const [connection, setConnection] = useState<
     ElviaConnectionResponse["connection"] | null
   >(null);
-  const [authStatus, setAuthStatus] = useState<string | null>("Sjekker innlogging");
+  const [authStatus, setAuthStatus] = useState<string | null>("Sjekker Minstrøm-konto");
   const [token, setToken] = useState("");
   const [tokenStatus, setTokenStatus] = useState<string | null>(null);
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
@@ -327,7 +327,9 @@ function ConnectPage({ navigate }: { navigate: (route: Route) => void }) {
         }
 
         setUser(result.user);
-        setAuthStatus(result.user ? null : "Opprett bruker eller logg inn.");
+        setAuthStatus(
+          result.user ? null : "Start med å opprette eller logge inn i Minstrøm."
+        );
 
         if (result.user) {
           await refreshConnection(() => isMounted);
@@ -366,19 +368,29 @@ function ConnectPage({ navigate }: { navigate: (route: Route) => void }) {
     setAuthStatus(null);
 
     try {
+      const cleanUsername = username.trim();
       const result =
         authMode === "register"
-          ? await registerUser(username, password)
-          : await loginUser(username, password);
+          ? await registerUser(cleanUsername, password)
+          : await loginUser(cleanUsername, password);
 
       setUser(result.user);
+      setUsername(result.user.username);
       setPassword("");
       setAuthStatus(
-        authMode === "register" ? "Brukeren er opprettet." : "Du er innlogget."
+        authMode === "register"
+          ? "Minstrøm-kontoen er klar. Nå kan du lime inn Elvia-tokenet."
+          : "Du er logget inn i Minstrøm."
       );
       await refreshConnection();
     } catch (error) {
-      setAuthStatus(error instanceof Error ? error.message : "Kunne ikke logge inn.");
+      setAuthStatus(
+        error instanceof Error
+          ? error.message
+          : authMode === "register"
+            ? "Kunne ikke opprette Minstrøm-konto."
+            : "Kunne ikke logge inn i Minstrøm."
+      );
     } finally {
       setIsSubmittingAuth(false);
     }
@@ -392,17 +404,27 @@ function ConnectPage({ navigate }: { navigate: (route: Route) => void }) {
       setUser(null);
       setConnection(null);
       setToken("");
-      setAuthStatus("Du er logget ut.");
+      setAuthStatus("Du er logget ut av Minstrøm.");
     } catch (error) {
-      setAuthStatus(error instanceof Error ? error.message : "Kunne ikke logge ut.");
+      setAuthStatus(
+        error instanceof Error ? error.message : "Kunne ikke logge ut av Minstrøm."
+      );
     }
   }
 
   async function onTokenSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const cleanToken = token.trim();
 
     if (!user) {
-      setTokenStatus("Logg inn før du kobler til Elvia.");
+      setTokenStatus(
+        "Opprett eller logg inn i Minstrøm først. Elvia-innloggingen lager bare tokenet."
+      );
+      return;
+    }
+
+    if (!cleanToken) {
+      setTokenStatus("Lim inn tokenet du kopierte fra Elvia.");
       return;
     }
 
@@ -410,12 +432,11 @@ function ConnectPage({ navigate }: { navigate: (route: Route) => void }) {
     setTokenStatus(null);
 
     try {
-      const result = await linkElviaToken(token);
+      const result = await linkElviaToken(cleanToken);
       setConnection(result.connection);
       setToken("");
       setTokenStatus(describeSyncResult(result.sync));
     } catch (error) {
-      setToken("");
       setTokenStatus(
         error instanceof Error ? error.message : "Kunne ikke koble Elvia."
       );
@@ -426,173 +447,203 @@ function ConnectPage({ navigate }: { navigate: (route: Route) => void }) {
 
   return (
     <main className="connect-layout">
-      <section className="connect-main">
-        <p className="eyebrow">Koble til datakilde</p>
-        <h1>Koble til Elvia, og la tallene våkne.</h1>
-        <p className="lead">
-          Første prototype bruker personlig token fra nettselskapet. Det er en
-          midlertidig snarvei inn til ekte data, mens arkitekturen peker mot Elhub og
-          ID-porten senere.
-        </p>
-
-        <div className="provider-row" role="list" aria-label="Datakilder">
-          <button className="provider-pill active" type="button">
-            <PlugZap aria-hidden="true" size={18} />
-            Elvia
-          </button>
-          <button className="provider-pill" disabled type="button">
-            <ShieldCheck aria-hidden="true" size={18} />
-            Elhub kommer
-          </button>
-        </div>
-
-        <div className="guide-panel">
-          <h2>Elvia-veiledning</h2>
-          <ol>
-            <li>Logg inn på Elvia Min side.</li>
-            <li>Velg riktig kundeforhold og åpne Tilganger.</li>
-            <li>Opprett token for riktig måler og kall det gjerne Minstrøm.</li>
-            <li>Kopier tokenet med én gang. Elvia viser det bare én gang.</li>
-            <li>Lim det inn her og koble til måleren.</li>
-          </ol>
-          <p className="warning-text">
-            Elvia er nettselskapet, ikke nødvendigvis strømleverandøren din. Tokenet er
-            en digital nøkkel til måledataene dine.
+      <section className="connect-flow">
+        <div className="connect-intro">
+          <p className="eyebrow">Koble til Elvia</p>
+          <h1>Tre steg. Ett sted. Ferdig.</h1>
+          <p className="lead">
+            Elvia-tokenet henter måledataene dine. Minstrøm-kontoen trengs bare for å
+            lagre koblingen og vise dataene dine neste gang du kommer tilbake.
           </p>
         </div>
-      </section>
 
-      <aside className="connect-side">
-        <section className="form-panel">
-          <LogIn aria-hidden="true" size={22} />
-          <h2>Konto</h2>
-          {user ? (
-            <div className="account-summary">
-              <p>
-                Innlogget som <strong>{user.username}</strong>
-              </p>
-              <button
-                className="secondary-action full-width"
-                onClick={() => {
-                  void onLogout();
-                }}
-                type="button"
-              >
-                <LogOut aria-hidden="true" size={18} />
-                Logg ut
-              </button>
+        <section className={`flow-step ${user ? "complete" : "active"}`}>
+          <span className="flow-step-number">1</span>
+          <div className="flow-step-body">
+            <div className="flow-step-heading">
+              <div>
+                <p className="step-label">Minstrøm-konto</p>
+                <h2>Opprett brukernavn og passord</h2>
+              </div>
+              {user && <span className="status-pill">Klar</span>}
             </div>
-          ) : (
-            <form
-              className="stacked-form"
-              onSubmit={(event) => {
-                void onAuthSubmit(event);
-              }}
-            >
-              <div className="mode-toggle" role="tablist" aria-label="Konto">
+
+            {user ? (
+              <div className="account-summary">
+                <p>
+                  Du er innlogget i Minstrøm som <strong>{user.username}</strong>.
+                </p>
                 <button
-                  aria-selected={authMode === "register"}
-                  onClick={() => setAuthMode("register")}
-                  role="tab"
+                  className="secondary-action"
+                  onClick={() => {
+                    void onLogout();
+                  }}
                   type="button"
                 >
-                  Opprett
-                </button>
-                <button
-                  aria-selected={authMode === "login"}
-                  onClick={() => setAuthMode("login")}
-                  role="tab"
-                  type="button"
-                >
-                  Logg inn
+                  <LogOut aria-hidden="true" size={18} />
+                  Logg ut
                 </button>
               </div>
-              <label htmlFor="username">Brukernavn</label>
-              <input
-                autoComplete="username"
-                id="username"
-                name="username"
-                onChange={(event) => setUsername(event.target.value)}
-                placeholder="daniel"
-                required
-                type="text"
-                value={username}
-              />
-              <label htmlFor="password">Passord</label>
-              <input
-                autoComplete={
-                  authMode === "register" ? "new-password" : "current-password"
-                }
-                id="password"
-                minLength={8}
-                name="password"
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder="Minst 8 tegn"
-                required
-                type="password"
-                value={password}
-              />
-              <button
-                className="primary-action full-width"
-                disabled={isSubmittingAuth}
-                type="submit"
+            ) : (
+              <form
+                className="stacked-form"
+                onSubmit={(event) => {
+                  void onAuthSubmit(event);
+                }}
               >
-                <ArrowRight aria-hidden="true" size={18} />
-                {isSubmittingAuth
-                  ? "Jobber"
-                  : authMode === "register"
-                    ? "Opprett bruker"
-                    : "Logg inn"}
-              </button>
-            </form>
-          )}
-          {authStatus && <p className="form-status">{authStatus}</p>}
+                <div className="mode-toggle" role="tablist" aria-label="Minstrøm-konto">
+                  <button
+                    aria-selected={authMode === "register"}
+                    onClick={() => setAuthMode("register")}
+                    role="tab"
+                    type="button"
+                  >
+                    Opprett
+                  </button>
+                  <button
+                    aria-selected={authMode === "login"}
+                    onClick={() => setAuthMode("login")}
+                    role="tab"
+                    type="button"
+                  >
+                    Logg inn
+                  </button>
+                </div>
+
+                <label htmlFor="username">Brukernavn</label>
+                <input
+                  autoComplete="username"
+                  id="username"
+                  maxLength={80}
+                  minLength={3}
+                  name="username"
+                  onChange={(event) => setUsername(event.target.value)}
+                  pattern="[A-Za-z0-9._-]{3,80}"
+                  placeholder="strombruker-1"
+                  required
+                  title="Bruk minst 3 tegn. Bruk bokstaver, tall, punktum, bindestrek eller understrek."
+                  type="text"
+                  value={username}
+                />
+                <p className="field-help">
+                  Minst 3 tegn. Ingen mellomrom. Dette er ikke Elvia-brukeren din.
+                </p>
+
+                <label htmlFor="password">Passord</label>
+                <input
+                  autoComplete={
+                    authMode === "register" ? "new-password" : "current-password"
+                  }
+                  id="password"
+                  minLength={8}
+                  name="password"
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Minst 8 tegn"
+                  required
+                  type="password"
+                  value={password}
+                />
+                <button
+                  className="primary-action full-width"
+                  disabled={isSubmittingAuth}
+                  type="submit"
+                >
+                  <LogIn aria-hidden="true" size={18} />
+                  {isSubmittingAuth
+                    ? "Jobber"
+                    : authMode === "register"
+                      ? "Opprett Minstrøm-konto"
+                      : "Logg inn i Minstrøm"}
+                </button>
+              </form>
+            )}
+            {authStatus && <p className="form-status">{authStatus}</p>}
+          </div>
+        </section>
+
+        <section className="flow-step">
+          <span className="flow-step-number">2</span>
+          <div className="flow-step-body">
+            <div className="flow-step-heading">
+              <div>
+                <p className="step-label">Elvia-token</p>
+                <h2>Finn tokenet hos Elvia</h2>
+              </div>
+            </div>
+            <ol className="token-guide">
+              <li>Logg inn på Elvia Min side.</li>
+              <li>Gå til kundeforholdet ditt og åpne Tilganger.</li>
+              <li>Opprett et personlig token for riktig måler.</li>
+              <li>Kopier tokenet med én gang. Elvia viser det bare én gang.</li>
+            </ol>
+            <p className="warning-text">
+              Elvia-innloggingen skjer hos Elvia. Den logger deg ikke inn i Minstrøm.
+            </p>
+          </div>
         </section>
 
         <form
-          className="form-panel"
+          className={`flow-step ${user ? "active" : "locked"}`}
           onSubmit={(event) => {
             void onTokenSubmit(event);
           }}
         >
-          <KeyRound aria-hidden="true" size={22} />
-          <h2>Elvia-token</h2>
-          {connection && (
-            <p className="form-status">{describeConnection(connection)}</p>
-          )}
-          <label htmlFor="elvia-token">Personlig tilgangstoken</label>
-          <input
-            autoComplete="off"
-            disabled={!user || isSubmittingToken}
-            id="elvia-token"
-            name="elvia-token"
-            onChange={(event) => setToken(event.target.value)}
-            placeholder={user ? "Lim inn tokenet fra Elvia" : "Logg inn først"}
-            required
-            spellCheck={false}
-            type="password"
-            value={token}
-          />
-          <button
-            className="primary-action full-width"
-            disabled={!user || isSubmittingToken}
-            type="submit"
-          >
-            <PlugZap aria-hidden="true" size={18} />
-            {isSubmittingToken ? "Kobler" : "Koble Elvia"}
-          </button>
-          {tokenStatus && <p className="form-status">{tokenStatus}</p>}
+          <span className="flow-step-number">3</span>
+          <div className="flow-step-body">
+            <div className="flow-step-heading">
+              <div>
+                <p className="step-label">Koble data</p>
+                <h2>Lim inn tokenet i Minstrøm</h2>
+              </div>
+              {connection?.status === "ACTIVE" && (
+                <span className="status-pill">Koblet</span>
+              )}
+            </div>
+
+            {connection && (
+              <p className="form-status">{describeConnection(connection)}</p>
+            )}
+
+            <label htmlFor="elvia-token">Personlig tilgangstoken fra Elvia</label>
+            <input
+              autoComplete="off"
+              disabled={isSubmittingToken}
+              id="elvia-token"
+              minLength={12}
+              name="elvia-token"
+              onChange={(event) => setToken(event.target.value)}
+              placeholder="Lim inn tokenet fra Elvia her"
+              required
+              spellCheck={false}
+              type="password"
+              value={token}
+            />
+            {!user && (
+              <p className="form-status">
+                Feltet kan fylles ut, men koblingen lagres først etter steg 1.
+              </p>
+            )}
+            <button
+              className="primary-action full-width"
+              disabled={!user || isSubmittingToken}
+              type="submit"
+            >
+              <PlugZap aria-hidden="true" size={18} />
+              {isSubmittingToken ? "Kobler" : "Koble Elvia"}
+            </button>
+            {tokenStatus && <p className="form-status">{tokenStatus}</p>}
+          </div>
         </form>
 
         <button
-          className="secondary-action full-width"
+          className="secondary-action connect-dashboard-link"
           onClick={() => navigate("/dashboard")}
           type="button"
         >
           <LineChart aria-hidden="true" size={18} />
           Åpne dashboard
         </button>
-      </aside>
+      </section>
     </main>
   );
 }
