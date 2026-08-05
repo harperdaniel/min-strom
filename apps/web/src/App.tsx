@@ -1065,35 +1065,47 @@ function createSmoothPath(points: ChartPoint[]): string {
     );
   }
 
-  return points.reduce((path, point, index) => {
-    if (index === 0) {
-      return "M " + point.x + " " + point.y;
+  const first = points[0];
+
+  if (!first) {
+    return "";
+  }
+
+  const tension = 0.18;
+  const path = ["M " + first.x + " " + first.y];
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const previous = points[Math.max(0, index - 1)];
+    const current = points[index];
+    const next = points[index + 1];
+    const afterNext = points[Math.min(points.length - 1, index + 2)];
+
+    if (!previous || !current || !next || !afterNext) {
+      continue;
     }
 
-    const previous = points[index - 1];
+    const firstControlX = current.x + (next.x - previous.x) * tension;
+    const firstControlY = current.y + (next.y - previous.y) * tension;
+    const secondControlX = next.x - (afterNext.x - current.x) * tension;
+    const secondControlY = next.y - (afterNext.y - current.y) * tension;
 
-    if (!previous) {
-      return path;
-    }
-
-    const controlDistance = (point.x - previous.x) / 2;
-
-    return (
-      path +
-      " C " +
-      (previous.x + controlDistance) +
-      " " +
-      previous.y +
-      ", " +
-      (point.x - controlDistance) +
-      " " +
-      point.y +
-      ", " +
-      point.x +
-      " " +
-      point.y
+    path.push(
+      "C " +
+        firstControlX +
+        " " +
+        firstControlY +
+        ", " +
+        secondControlX +
+        " " +
+        secondControlY +
+        ", " +
+        next.x +
+        " " +
+        next.y
     );
-  }, "");
+  }
+
+  return path.join(" ");
 }
 
 function formatDateTime(value: string | null): string {
