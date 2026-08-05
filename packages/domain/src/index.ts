@@ -15,8 +15,13 @@ export type MeterValueQuality = (typeof METER_VALUE_QUALITIES)[number];
 
 export interface User {
   id: string;
-  email: string;
-  emailVerifiedAt: Date | null;
+  username: string;
+  passwordHash: string;
+  passwordSalt: string;
+  elviaLinkStatus: "NOT_LINKED" | "LINKED_PENDING_FETCH" | "ERROR";
+  elviaLinkedAt: Date | null;
+  elviaLastErrorCode: string | null;
+  lastLoginAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;

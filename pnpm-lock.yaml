@@ -37,6 +37,9 @@ importers:
       "@minstrom/api-contract":
         specifier: workspace:*
         version: link:../../packages/api-contract
+      "@minstrom/database":
+        specifier: workspace:*
+        version: link:../../packages/database
       "@minstrom/domain":
         specifier: workspace:*
         version: link:../../packages/domain

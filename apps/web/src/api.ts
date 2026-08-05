@@ -1,10 +1,15 @@
 import {
   apiErrorSchema,
-  credentialValidationResponseSchema,
+  authResponseSchema,
   dashboardSummaryResponseSchema,
-  requestMagicLinkResponseSchema,
-  type CredentialValidationResponse,
-  type DashboardSummaryResponse
+  elviaConnectionResponseSchema,
+  elviaLinkResponseSchema,
+  meResponseSchema,
+  type AuthResponse,
+  type DashboardSummaryResponse,
+  type ElviaConnectionResponse,
+  type ElviaLinkResponse,
+  type MeResponse
 } from "@minstrom/api-contract";
 
 const env = import.meta.env as Record<string, unknown>;
@@ -15,7 +20,9 @@ const API_BASE_URL =
     : "http://localhost:3000";
 
 export async function fetchDemoDashboard(): Promise<DashboardSummaryResponse> {
-  const response = await fetch(API_BASE_URL + "/api/demo/dashboard");
+  const response = await fetch(API_BASE_URL + "/api/demo/dashboard", {
+    credentials: "include"
+  });
 
   if (!response.ok) {
     throw new Error("Kunne ikke hente dashboarddata.");
@@ -25,42 +32,117 @@ export async function fetchDemoDashboard(): Promise<DashboardSummaryResponse> {
   return dashboardSummaryResponseSchema.parse(body);
 }
 
-export async function requestMagicLink(email: string): Promise<void> {
-  const response = await fetch(API_BASE_URL + "/api/auth/request-link", {
-    body: JSON.stringify({ email }),
+export async function registerUser(
+  username: string,
+  password: string
+): Promise<AuthResponse> {
+  const response = await fetch(API_BASE_URL + "/api/auth/register", {
+    body: JSON.stringify({ password, username }),
+    credentials: "include",
     headers: {
       "Content-Type": "application/json"
     },
     method: "POST"
   });
+  const body = await parseJson(response, "Kunne ikke opprette bruker.");
 
   if (!response.ok) {
-    throw new Error("Kunne ikke sende innloggingslenke.");
+    throw new Error(readErrorMessage(body, "Kunne ikke opprette bruker."));
   }
 
-  const body: unknown = await response.json();
-  requestMagicLinkResponseSchema.parse(body);
+  return authResponseSchema.parse(body);
 }
 
-export async function validateElviaToken(
-  token: string
-): Promise<CredentialValidationResponse> {
-  const response = await fetch(API_BASE_URL + "/api/connections/elvia/validate", {
-    body: JSON.stringify({ token }),
+export async function loginUser(
+  username: string,
+  password: string
+): Promise<AuthResponse> {
+  const response = await fetch(API_BASE_URL + "/api/auth/login", {
+    body: JSON.stringify({ password, username }),
+    credentials: "include",
     headers: {
       "Content-Type": "application/json"
     },
     method: "POST"
   });
-
-  const body: unknown = await response.json();
+  const body = await parseJson(response, "Kunne ikke logge inn.");
 
   if (!response.ok) {
-    const errorBody = apiErrorSchema.safeParse(body);
-    throw new Error(
-      errorBody.success ? errorBody.data.error.message : "Kunne ikke validere token."
-    );
+    throw new Error(readErrorMessage(body, "Kunne ikke logge inn."));
   }
 
-  return credentialValidationResponseSchema.parse(body);
+  return authResponseSchema.parse(body);
+}
+
+export async function logoutUser(): Promise<void> {
+  const response = await fetch(API_BASE_URL + "/api/auth/logout", {
+    credentials: "include",
+    method: "POST"
+  });
+  const body = await parseJson(response, "Kunne ikke logge ut.");
+
+  if (!response.ok) {
+    throw new Error(readErrorMessage(body, "Kunne ikke logge ut."));
+  }
+}
+
+export async function fetchMe(): Promise<MeResponse> {
+  const response = await fetch(API_BASE_URL + "/api/me", {
+    credentials: "include"
+  });
+  const body = await parseJson(response, "Kunne ikke hente bruker.");
+
+  if (!response.ok) {
+    throw new Error(readErrorMessage(body, "Kunne ikke hente bruker."));
+  }
+
+  return meResponseSchema.parse(body);
+}
+
+export async function fetchElviaConnection(): Promise<ElviaConnectionResponse> {
+  const response = await fetch(API_BASE_URL + "/api/connections", {
+    credentials: "include"
+  });
+  const body = await parseJson(response, "Kunne ikke hente tilkobling.");
+
+  if (!response.ok) {
+    throw new Error(readErrorMessage(body, "Kunne ikke hente tilkobling."));
+  }
+
+  return elviaConnectionResponseSchema.parse(body);
+}
+
+export async function linkElviaToken(token: string): Promise<ElviaLinkResponse> {
+  const response = await fetch(API_BASE_URL + "/api/connections/elvia", {
+    body: JSON.stringify({ token }),
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    method: "POST"
+  });
+  const body = await parseJson(response, "Kunne ikke koble til Elvia.");
+
+  if (!response.ok) {
+    throw new Error(readErrorMessage(body, "Kunne ikke koble til Elvia."));
+  }
+
+  return elviaLinkResponseSchema.parse(body);
+}
+
+async function parseJson(
+  response: Response,
+  fallbackMessage: string
+): Promise<unknown> {
+  try {
+    return await response.json();
+  } catch {
+    throw new Error(fallbackMessage);
+  }
+}
+
+function readErrorMessage(body: unknown, fallbackMessage: string): string {
+  const errorBody = apiErrorSchema.safeParse(body);
+
+  return errorBody.success ? errorBody.data.error.message : fallbackMessage;
 }

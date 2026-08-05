@@ -5,10 +5,12 @@ import {
   KeyRound,
   LineChart,
   LogIn,
+  LogOut,
   PlugZap,
   ShieldCheck,
   Trash2
 } from "lucide-react";
+import { type AuthUser, type ElviaConnectionResponse } from "@minstrom/api-contract";
 import {
   type CSSProperties,
   type FormEvent,
@@ -17,7 +19,15 @@ import {
   useState
 } from "react";
 
-import { fetchDemoDashboard, requestMagicLink, validateElviaToken } from "./api.js";
+import {
+  fetchDemoDashboard,
+  fetchElviaConnection,
+  fetchMe,
+  linkElviaToken,
+  loginUser,
+  logoutUser,
+  registerUser
+} from "./api.js";
 import { createFallbackDashboard } from "./fallback-dashboard.js";
 
 type Route = "/" | "/connect" | "/dashboard";
@@ -200,44 +210,123 @@ function LandingPage({ navigate }: { navigate: (route: Route) => void }) {
 }
 
 function ConnectPage({ navigate }: { navigate: (route: Route) => void }) {
-  const [email, setEmail] = useState("");
-  const [emailStatus, setEmailStatus] = useState<string | null>(null);
+  const [authMode, setAuthMode] = useState<"register" | "login">("register");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [connection, setConnection] = useState<
+    ElviaConnectionResponse["connection"] | null
+  >(null);
+  const [authStatus, setAuthStatus] = useState<string | null>("Sjekker innlogging");
   const [token, setToken] = useState("");
   const [tokenStatus, setTokenStatus] = useState<string | null>(null);
+  const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
   const [isSubmittingToken, setIsSubmittingToken] = useState(false);
 
-  async function onEmailSubmit(event: FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    let isMounted = true;
+
+    fetchMe()
+      .then(async (result) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setUser(result.user);
+        setAuthStatus(result.user ? null : "Opprett bruker eller logg inn.");
+
+        if (result.user) {
+          await refreshConnection(() => isMounted);
+        }
+      })
+      .catch((error: unknown) => {
+        if (isMounted) {
+          setAuthStatus(
+            error instanceof Error ? error.message : "Kunne ikke sjekke innlogging."
+          );
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  async function refreshConnection(canUpdate: () => boolean = () => true) {
+    try {
+      const result = await fetchElviaConnection();
+
+      if (canUpdate()) {
+        setConnection(result.connection);
+      }
+    } catch {
+      if (canUpdate()) {
+        setConnection(null);
+      }
+    }
+  }
+
+  async function onAuthSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setEmailStatus(null);
+    setIsSubmittingAuth(true);
+    setAuthStatus(null);
 
     try {
-      await requestMagicLink(email);
-      setEmailStatus("Vi sender en innloggingslenke hvis e-posten kan brukes.");
-    } catch (error) {
-      setEmailStatus(
-        error instanceof Error ? error.message : "Kunne ikke sende lenke."
+      const result =
+        authMode === "register"
+          ? await registerUser(username, password)
+          : await loginUser(username, password);
+
+      setUser(result.user);
+      setPassword("");
+      setAuthStatus(
+        authMode === "register" ? "Brukeren er opprettet." : "Du er innlogget."
       );
+      await refreshConnection();
+    } catch (error) {
+      setAuthStatus(error instanceof Error ? error.message : "Kunne ikke logge inn.");
+    } finally {
+      setIsSubmittingAuth(false);
+    }
+  }
+
+  async function onLogout() {
+    setAuthStatus(null);
+
+    try {
+      await logoutUser();
+      setUser(null);
+      setConnection(null);
+      setToken("");
+      setAuthStatus("Du er logget ut.");
+    } catch (error) {
+      setAuthStatus(error instanceof Error ? error.message : "Kunne ikke logge ut.");
     }
   }
 
   async function onTokenSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (!user) {
+      setTokenStatus("Logg inn før du kobler til Elvia.");
+      return;
+    }
+
     setIsSubmittingToken(true);
     setTokenStatus(null);
 
     try {
-      const result = await validateElviaToken(token);
+      const result = await linkElviaToken(token);
+      setConnection(result.connection);
       setToken("");
       setTokenStatus(
-        result.userMessage ??
-          (result.valid
-            ? "Tokenet ble validert."
-            : "Tokenet kunne ikke valideres akkurat nå.")
+        result.validation.userMessage ??
+          "Elvia-tokenet er lagret. Datahenting kobles på i neste steg."
       );
     } catch (error) {
       setToken("");
       setTokenStatus(
-        error instanceof Error ? error.message : "Kunne ikke validere token."
+        error instanceof Error ? error.message : "Kunne ikke koble Elvia."
       );
     } finally {
       setIsSubmittingToken(false);
@@ -282,31 +371,91 @@ function ConnectPage({ navigate }: { navigate: (route: Route) => void }) {
       </section>
 
       <aside className="connect-side">
-        <form
-          className="form-panel"
-          onSubmit={(event) => {
-            void onEmailSubmit(event);
-          }}
-        >
+        <section className="form-panel">
           <LogIn aria-hidden="true" size={22} />
           <h2>Konto</h2>
-          <label htmlFor="email">E-post</label>
-          <input
-            autoComplete="email"
-            id="email"
-            name="email"
-            onChange={(event) => setEmail(event.target.value)}
-            placeholder="deg@example.no"
-            required
-            type="email"
-            value={email}
-          />
-          <button className="primary-action full-width" type="submit">
-            <ArrowRight aria-hidden="true" size={18} />
-            Send lenke
-          </button>
-          {emailStatus && <p className="form-status">{emailStatus}</p>}
-        </form>
+          {user ? (
+            <div className="account-summary">
+              <p>
+                Innlogget som <strong>{user.username}</strong>
+              </p>
+              <button
+                className="secondary-action full-width"
+                onClick={() => {
+                  void onLogout();
+                }}
+                type="button"
+              >
+                <LogOut aria-hidden="true" size={18} />
+                Logg ut
+              </button>
+            </div>
+          ) : (
+            <form
+              className="stacked-form"
+              onSubmit={(event) => {
+                void onAuthSubmit(event);
+              }}
+            >
+              <div className="mode-toggle" role="tablist" aria-label="Konto">
+                <button
+                  aria-selected={authMode === "register"}
+                  onClick={() => setAuthMode("register")}
+                  role="tab"
+                  type="button"
+                >
+                  Opprett
+                </button>
+                <button
+                  aria-selected={authMode === "login"}
+                  onClick={() => setAuthMode("login")}
+                  role="tab"
+                  type="button"
+                >
+                  Logg inn
+                </button>
+              </div>
+              <label htmlFor="username">Brukernavn</label>
+              <input
+                autoComplete="username"
+                id="username"
+                name="username"
+                onChange={(event) => setUsername(event.target.value)}
+                placeholder="daniel"
+                required
+                type="text"
+                value={username}
+              />
+              <label htmlFor="password">Passord</label>
+              <input
+                autoComplete={
+                  authMode === "register" ? "new-password" : "current-password"
+                }
+                id="password"
+                minLength={8}
+                name="password"
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="Minst 8 tegn"
+                required
+                type="password"
+                value={password}
+              />
+              <button
+                className="primary-action full-width"
+                disabled={isSubmittingAuth}
+                type="submit"
+              >
+                <ArrowRight aria-hidden="true" size={18} />
+                {isSubmittingAuth
+                  ? "Jobber"
+                  : authMode === "register"
+                    ? "Opprett bruker"
+                    : "Logg inn"}
+              </button>
+            </form>
+          )}
+          {authStatus && <p className="form-status">{authStatus}</p>}
+        </section>
 
         <form
           className="form-panel"
@@ -316,13 +465,17 @@ function ConnectPage({ navigate }: { navigate: (route: Route) => void }) {
         >
           <KeyRound aria-hidden="true" size={22} />
           <h2>Elvia-token</h2>
+          {connection && (
+            <p className="form-status">{describeConnection(connection)}</p>
+          )}
           <label htmlFor="elvia-token">Personlig tilgangstoken</label>
           <input
             autoComplete="off"
+            disabled={!user || isSubmittingToken}
             id="elvia-token"
             name="elvia-token"
             onChange={(event) => setToken(event.target.value)}
-            placeholder="Lim inn tokenet fra Elvia"
+            placeholder={user ? "Lim inn tokenet fra Elvia" : "Logg inn først"}
             required
             spellCheck={false}
             type="password"
@@ -330,11 +483,11 @@ function ConnectPage({ navigate }: { navigate: (route: Route) => void }) {
           />
           <button
             className="primary-action full-width"
-            disabled={isSubmittingToken}
+            disabled={!user || isSubmittingToken}
             type="submit"
           >
             <PlugZap aria-hidden="true" size={18} />
-            {isSubmittingToken ? "Tester" : "Test tilkobling"}
+            {isSubmittingToken ? "Kobler" : "Koble Elvia"}
           </button>
           {tokenStatus && <p className="form-status">{tokenStatus}</p>}
         </form>
@@ -350,6 +503,18 @@ function ConnectPage({ navigate }: { navigate: (route: Route) => void }) {
       </aside>
     </main>
   );
+}
+
+function describeConnection(connection: ElviaConnectionResponse["connection"]): string {
+  if (connection.status === "LINKED_PENDING_FETCH") {
+    return "Elvia er koblet. Datahenting venter på neste dataspike.";
+  }
+
+  if (connection.status === "ERROR") {
+    return "Elvia-koblingen trenger ny kontroll.";
+  }
+
+  return "Elvia er ikke koblet ennå.";
 }
 
 function DashboardPage() {

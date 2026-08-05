@@ -31,6 +31,11 @@ button {
   cursor: pointer;
 }
 
+button:disabled,
+input:disabled {
+  cursor: not-allowed;
+}
+
 .app-shell {
   min-height: 100vh;
 }
@@ -384,6 +389,42 @@ h2 {
   padding: 22px;
 }
 
+.stacked-form,
+.account-summary {
+  display: grid;
+  gap: 12px;
+}
+
+.account-summary p {
+  color: #27342f;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.mode-toggle {
+  background: #edf2ef;
+  border: 1px solid #dbe5df;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  grid-template-columns: 1fr 1fr;
+  min-height: 42px;
+  padding: 4px;
+}
+
+.mode-toggle button {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #52645c;
+  font-weight: 800;
+}
+
+.mode-toggle button[aria-selected="true"] {
+  background: #ffffff;
+  color: #17211d;
+}
+
 .form-panel label {
   color: #52645c;
   font-weight: 700;
@@ -400,6 +441,11 @@ h2 {
 .form-panel input:focus {
   border-color: #0d6b5f;
   outline: 3px solid rgba(13, 107, 95, 0.16);
+}
+
+.form-panel input:disabled {
+  background: #eef3f0;
+  color: #697870;
 }
 
 .form-status {

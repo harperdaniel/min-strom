@@ -34,6 +34,49 @@ export const verifyMagicLinkRequestSchema = z.object({
   token: z.string().min(16).max(512)
 });
 
+export const usernameSchema = z
+  .string()
+  .trim()
+  .min(3)
+  .max(80)
+  .regex(/^[A-Za-z0-9._-]+$/)
+  .transform((value) => value.toLowerCase());
+
+export const passwordSchema = z.string().min(8).max(256);
+
+export const authCredentialsRequestSchema = z.object({
+  username: usernameSchema,
+  password: passwordSchema
+});
+
+export const elviaLinkStatusSchema = z.enum([
+  "NOT_LINKED",
+  "LINKED_PENDING_FETCH",
+  "ERROR"
+]);
+
+export const authUserSchema = z.object({
+  id: z.string().uuid(),
+  username: z.string(),
+  elviaLinkStatus: elviaLinkStatusSchema,
+  elviaLinkedAt: isoDateTimeSchema.nullable(),
+  elviaLastErrorCode: z.string().nullable(),
+  lastLoginAt: isoDateTimeSchema.nullable(),
+  createdAt: isoDateTimeSchema
+});
+
+export const authResponseSchema = z.object({
+  user: authUserSchema
+});
+
+export const meResponseSchema = z.object({
+  user: authUserSchema.nullable()
+});
+
+export const logoutResponseSchema = z.object({
+  ok: z.literal(true)
+});
+
 export const providerInfoSchema = z.object({
   type: providerTypeSchema,
   name: z.string(),
@@ -50,11 +93,29 @@ export const elviaCredentialValidationRequestSchema = z.object({
   token: z.string().min(12).max(4096)
 });
 
+export const elviaLinkRequestSchema = elviaCredentialValidationRequestSchema;
+
 export const credentialValidationResponseSchema = z.object({
   valid: z.boolean(),
   providerType: providerTypeSchema,
   errorCode: z.string().optional(),
   userMessage: z.string().optional()
+});
+
+export const elviaConnectionSchema = z.object({
+  providerType: z.literal("ELVIA_TOKEN"),
+  status: elviaLinkStatusSchema,
+  linkedAt: isoDateTimeSchema.nullable(),
+  lastErrorCode: z.string().nullable()
+});
+
+export const elviaConnectionResponseSchema = z.object({
+  connection: elviaConnectionSchema
+});
+
+export const elviaLinkResponseSchema = z.object({
+  connection: elviaConnectionSchema,
+  validation: credentialValidationResponseSchema
 });
 
 export const meterPointSchema = z.object({
@@ -121,3 +182,8 @@ export type DashboardSummaryResponse = z.infer<typeof dashboardSummaryResponseSc
 export type CredentialValidationResponse = z.infer<
   typeof credentialValidationResponseSchema
 >;
+export type AuthUser = z.infer<typeof authUserSchema>;
+export type AuthResponse = z.infer<typeof authResponseSchema>;
+export type MeResponse = z.infer<typeof meResponseSchema>;
+export type ElviaConnectionResponse = z.infer<typeof elviaConnectionResponseSchema>;
+export type ElviaLinkResponse = z.infer<typeof elviaLinkResponseSchema>;

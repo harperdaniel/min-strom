@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@minstrom/api-contract": "workspace:*",
+    "@minstrom/database": "workspace:*",
     "@minstrom/domain": "workspace:*",
     "@minstrom/providers": "workspace:*",
     "cors": "^2.8.5",

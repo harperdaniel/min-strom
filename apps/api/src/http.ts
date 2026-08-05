@@ -2,6 +2,17 @@ import { ProviderNotReadyError } from "@minstrom/providers";
 import { type NextFunction, type Request, type Response } from "express";
 import { type ZodType } from "zod";
 
+export class ApiHttpError extends Error {
+  constructor(
+    readonly statusCode: number,
+    readonly code: string,
+    message: string
+  ) {
+    super(message);
+    this.name = "ApiHttpError";
+  }
+}
+
 export function validateBody(schema: ZodType) {
   return (request: Request, response: Response, next: NextFunction) => {
     const result = schema.safeParse(request.body);
@@ -38,6 +49,16 @@ export function errorHandler(
         code: error.code,
         message:
           "Datakilden er ikke ferdig verifisert ennå. Vi må gjøre en kontrollert dataspike før ekte tokens tas imot."
+      }
+    });
+    return;
+  }
+
+  if (error instanceof ApiHttpError) {
+    response.status(error.statusCode).json({
+      error: {
+        code: error.code,
+        message: error.message
       }
     });
     return;

@@ -37,12 +37,21 @@ export const users = pgTable(
   "users",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    email: varchar("email", { length: 320 }).notNull(),
-    emailVerifiedAt: timestamp("email_verified_at", { withTimezone: true }),
+    username: varchar("username", { length: 80 }).notNull(),
+    passwordHash: text("password_hash").notNull(),
+    passwordSalt: text("password_salt").notNull(),
+    elviaTokenEncrypted: text("elvia_token_encrypted"),
+    elviaTokenKeyVersion: integer("elvia_token_key_version"),
+    elviaLinkStatus: varchar("elvia_link_status", { length: 40 })
+      .notNull()
+      .default("NOT_LINKED"),
+    elviaLinkedAt: timestamp("elvia_linked_at", { withTimezone: true }),
+    elviaLastErrorCode: text("elvia_last_error_code"),
+    lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     ...timestamps
   },
-  (table) => [uniqueIndex("users_email_unique").on(table.email)]
+  (table) => [uniqueIndex("users_username_unique").on(table.username)]
 );
 
 export const dataConnections = pgTable("data_connections", {

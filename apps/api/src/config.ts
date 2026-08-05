@@ -6,6 +6,10 @@ const envSchema = z.object({
   DATABASE_URL: z.string().optional(),
   ELVIA_API_BASE_URL: z.string().url().optional(),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  SESSION_COOKIE_SECURE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
   SESSION_SECRET: z.string().optional(),
   WEB_ORIGIN: z.string().url().default("http://localhost:5173")
 });
