@@ -13,16 +13,14 @@ import {
 } from "@minstrom/api-contract";
 import {
   DuplicateUsernameError,
+  type DashboardSourceRecord,
   type ElviaLinkStatus,
   type EnergyDataRepository,
+  type MeterValueRecord,
   type UserRecord,
   type UserRepository
 } from "@minstrom/database";
-import {
-  type CredentialValidationResult,
-  type DateRange,
-  type MeterValueDraft
-} from "@minstrom/domain";
+import { type CredentialValidationResult, type DateRange } from "@minstrom/domain";
 import {
   createProviderRegistry,
   ProviderCredentialError,
@@ -35,7 +33,11 @@ import helmet from "helmet";
 
 import { hashPassword, verifyPassword } from "./auth.js";
 import { loadConfig, type ApiConfig } from "./config.js";
-import { credentialKeyVersion, encryptCredential } from "./credentials.js";
+import {
+  credentialKeyVersion,
+  decryptCredential,
+  encryptCredential
+} from "./credentials.js";
 import { createDashboardFromSource } from "./dashboard.js";
 import { createDemoDashboard } from "./demo-data.js";
 import { MemoryEnergyDataRepository } from "./energy-store.js";
@@ -234,7 +236,7 @@ export function createApp(
         let sync: ElviaSyncSummary;
 
         try {
-          sync = await syncElviaData({
+          sync = await prepareElviaConnection({
             connectionId: connection.id,
             energy,
             registry,
@@ -252,11 +254,12 @@ export function createApp(
         }
 
         const linkStatus: ElviaLinkStatus =
-          sync.valueCount > 0 ? "ACTIVE" : "LINKED_PENDING_FETCH";
-        const lastErrorCode = sync.valueCount > 0 ? null : "ELVIA_NO_VALUES_RETURNED";
+          sync.meterPointCount > 0 ? "ACTIVE" : "LINKED_PENDING_FETCH";
+        const lastErrorCode =
+          sync.meterPointCount > 0 ? null : "ELVIA_NO_METERS_RETURNED";
         await energy.updateConnectionSyncResult(connection.id, {
           lastErrorCode,
-          status: sync.valueCount > 0 ? "ACTIVE" : "PENDING",
+          status: sync.meterPointCount > 0 ? "ACTIVE" : "PENDING",
           succeeded: true
         });
         const updatedUser = await users.linkElviaToken(user.id, {
@@ -299,7 +302,17 @@ export function createApp(
       const user = await requireCurrentUser(request, config, users);
       const period = createDashboardPeriod();
       const source = await energy.getDashboardSource(user.id, period);
-      const dashboard = source ? createDashboardFromSource(source) : null;
+      const liveSource = source
+        ? await fetchLiveDashboardSource({
+            config,
+            energy,
+            period,
+            registry,
+            source,
+            user
+          })
+        : null;
+      const dashboard = liveSource ? createDashboardFromSource(liveSource) : null;
 
       if (!dashboard) {
         throw new ApiHttpError(
@@ -395,7 +408,7 @@ function ensureUsableElviaValidation(validation: CredentialValidationResult): vo
   );
 }
 
-async function syncElviaData(input: {
+async function prepareElviaConnection(input: {
   connectionId: string;
   energy: EnergyDataRepository;
   registry: ProviderRegistry;
@@ -403,17 +416,7 @@ async function syncElviaData(input: {
   user: UserRecord;
 }): Promise<ElviaSyncSummary> {
   const provider = input.registry.get("ELVIA_TOKEN");
-  const period = createInitialSyncPeriod();
-  const run = await input.energy.createSyncRun({
-    connectionId: input.connectionId,
-    periodFrom: period.from,
-    periodTo: period.to,
-    status: "RUNNING"
-  });
-  let recordsReceived = 0;
-  let recordsInserted = 0;
-  let recordsUpdated = 0;
-  let meterPointCount = 0;
+  const period = createDashboardPeriod();
 
   try {
     const context = {
@@ -426,62 +429,20 @@ async function syncElviaData(input: {
       userId: input.user.id
     };
     const meterPoints = await provider.listMeterPoints(context);
-    meterPointCount = meterPoints.length;
 
     for (const meterPointDraft of meterPoints) {
-      const meterPoint = await input.energy.upsertMeterPoint(
-        input.connectionId,
-        meterPointDraft
-      );
-      const providerValues = (
-        await Promise.all(
-          createMonthlySyncPeriods(period).map((syncPeriod) =>
-            provider.getMeterValues(
-              context,
-              meterPointDraft.externalMeterPointId,
-              syncPeriod
-            )
-          )
-        )
-      ).flat();
-      const values = providerValues.map<MeterValueDraft>((value) => ({
-        ...value,
-        meterPointId: meterPoint.id
-      }));
-      const stats = await input.energy.upsertMeterValues(meterPoint.id, values);
-
-      recordsReceived += stats.received;
-      recordsInserted += stats.inserted;
-      recordsUpdated += stats.updated;
+      await input.energy.upsertMeterPoint(input.connectionId, meterPointDraft);
     }
 
-    await input.energy.finishSyncRun(run.id, {
-      errorCode: null,
-      errorMessageSanitized: null,
-      recordsInserted,
-      recordsReceived,
-      recordsUpdated,
-      status: "SUCCEEDED"
-    });
-
     return {
-      meterPointCount,
+      meterPointCount: meterPoints.length,
       periodFrom: period.from.toISOString(),
       periodTo: period.to.toISOString(),
-      valueCount: recordsReceived
+      valueCount: 0
     };
   } catch (error) {
-    const errorCode = toSyncErrorCode(error);
-    await input.energy.finishSyncRun(run.id, {
-      errorCode,
-      errorMessageSanitized: sanitizeErrorMessage(error),
-      recordsInserted,
-      recordsReceived,
-      recordsUpdated,
-      status: "FAILED"
-    });
     await input.energy.updateConnectionSyncResult(input.connectionId, {
-      lastErrorCode: errorCode,
+      lastErrorCode: toSyncErrorCode(error),
       status: "ERROR",
       succeeded: false
     });
@@ -496,20 +457,104 @@ async function syncElviaData(input: {
 
     throw new ApiHttpError(
       502,
-      errorCode,
-      "Vi klarte ikke å hente måleverdier fra Elvia akkurat nå."
+      toSyncErrorCode(error),
+      "Vi klarte ikke å klargjøre Elvia-koblingen akkurat nå."
     );
   }
 }
 
-function createInitialSyncPeriod(now = new Date()): DateRange {
-  const to = new Date(now);
-  to.setUTCMinutes(0, 0, 0);
+async function fetchLiveDashboardSource(input: {
+  config: ApiConfig;
+  energy: EnergyDataRepository;
+  period: DateRange;
+  registry: ProviderRegistry;
+  source: DashboardSourceRecord;
+  user: UserRecord;
+}): Promise<DashboardSourceRecord> {
+  if (!input.source.connection.encryptedCredentials) {
+    throw new ApiHttpError(
+      404,
+      "DATA_NOT_READY",
+      "Koble til Elvia for å se egne strømdata."
+    );
+  }
 
-  return {
-    from: createStartOfPreviousYear(to),
-    to
+  if (input.source.meterPoint.externalMeterPointId === "missing-meter-point") {
+    throw new ApiHttpError(
+      404,
+      "DATA_NOT_READY",
+      "Elvia-koblingen mangler målepunkt. Koble til Elvia på nytt."
+    );
+  }
+
+  const token = decryptCredential(
+    input.source.connection.encryptedCredentials,
+    input.config
+  );
+  const provider = input.registry.get("ELVIA_TOKEN");
+  const context = {
+    connectionId: input.source.connection.id,
+    credentials: {
+      token,
+      type: "ELVIA_TOKEN" as const
+    },
+    providerType: "ELVIA_TOKEN" as const,
+    userId: input.user.id
   };
+
+  try {
+    const values = (
+      await Promise.all(
+        createMonthlySyncPeriods(input.period).map((syncPeriod) =>
+          provider.getMeterValues(
+            context,
+            input.source.meterPoint.externalMeterPointId,
+            syncPeriod
+          )
+        )
+      )
+    )
+      .flat()
+      .map<MeterValueRecord>((value) => ({
+        ...value,
+        meterPointId: input.source.meterPoint.id,
+        receivedAt: new Date(),
+        updatedAt: new Date(),
+        verified: value.quality === "VERIFIED"
+      }));
+
+    await input.energy.updateConnectionSyncResult(input.source.connection.id, {
+      lastErrorCode: null,
+      status: "ACTIVE",
+      succeeded: true
+    });
+
+    return {
+      ...input.source,
+      values
+    };
+  } catch (error) {
+    const errorCode = toSyncErrorCode(error);
+    await input.energy.updateConnectionSyncResult(input.source.connection.id, {
+      lastErrorCode: errorCode,
+      status: "ERROR",
+      succeeded: false
+    });
+
+    if (error instanceof ProviderCredentialError) {
+      throw new ApiHttpError(
+        400,
+        "ELVIA_TOKEN_REJECTED",
+        "Elvia avviste tokenet. Koble til Elvia på nytt."
+      );
+    }
+
+    throw new ApiHttpError(
+      502,
+      errorCode,
+      "Vi klarte ikke å hente måleverdier fra Elvia akkurat nå."
+    );
+  }
 }
 
 function createDashboardPeriod(now = new Date()): DateRange {
@@ -556,14 +601,6 @@ function toSyncErrorCode(error: unknown): string {
   }
 
   return "ELVIA_SYNC_FAILED";
-}
-
-function sanitizeErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message.slice(0, 240);
-  }
-
-  return "Unknown sync error.";
 }
 
 function toAuthUser(user: UserRecord) {

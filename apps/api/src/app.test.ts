@@ -147,9 +147,10 @@ describe("api", () => {
     });
   });
 
-  it("links Elvia, fetches meter values, and never echoes the token", async () => {
+  it("links Elvia, prepares meter points, and never echoes the token", async () => {
+    const provider = new FakeElviaProvider();
     const app = createApp(testConfig(), {
-      providerRegistry: createFakeRegistry(new FakeElviaProvider())
+      providerRegistry: createFakeRegistry(provider)
     });
     const token = "demo-token-with-enough-length";
 
@@ -173,13 +174,15 @@ describe("api", () => {
       status: "ACTIVE"
     });
     expect(body.sync.meterPointCount).toBe(1);
-    expect(body.sync.valueCount).toBeGreaterThan(6);
+    expect(body.sync.valueCount).toBe(0);
+    expect(provider.meterValueRequestCount).toBe(0);
     expect(JSON.stringify(body)).not.toContain(token);
   });
 
   it("returns real dashboard data after Elvia linking", async () => {
+    const provider = new FakeElviaProvider();
     const app = createApp(testConfig(), {
-      providerRegistry: createFakeRegistry(new FakeElviaProvider())
+      providerRegistry: createFakeRegistry(provider)
     });
     const agent = request.agent(app);
 
@@ -201,6 +204,7 @@ describe("api", () => {
     });
     expect(dashboard.hourly).toHaveLength(6);
     expect(dashboard.monthly).toHaveLength(12);
+    expect(provider.meterValueRequestCount).toBeGreaterThan(0);
     expect(dashboard.monthly.some((month) => month.thisYearKwh !== null)).toBe(true);
     expect(dashboard.totals.todayKwh).toBeGreaterThan(0);
   });
@@ -261,6 +265,8 @@ describe("api", () => {
 class FakeElviaProvider implements ConsumptionProvider {
   readonly type = "ELVIA_TOKEN";
 
+  meterValueRequestCount = 0;
+
   private readonly failSync: boolean;
   private readonly valid: boolean;
 
@@ -313,6 +319,7 @@ class FakeElviaProvider implements ConsumptionProvider {
     period: DateRange
   ): Promise<MeterValueDraft[]> {
     void _connection;
+    this.meterValueRequestCount += 1;
 
     const latestDay = new Date(period.to);
     latestDay.setUTCHours(0, 0, 0, 0);

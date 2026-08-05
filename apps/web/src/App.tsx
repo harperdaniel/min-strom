@@ -664,7 +664,7 @@ function describeSyncResult(sync: {
   }
 
   if (sync.meterPointCount > 0) {
-    return "Elvia er koblet, men Elvia returnerte ingen måleverdier for perioden ennå.";
+    return "Elvia er koblet. Måleverdier hentes direkte fra Elvia når du åpner dashboardet.";
   }
 
   return "Tokenet ble godtatt, men Elvia returnerte ingen målere ennå.";
@@ -672,11 +672,11 @@ function describeSyncResult(sync: {
 
 function describeConnection(connection: ElviaConnectionResponse["connection"]): string {
   if (connection.status === "ACTIVE") {
-    return "Elvia er koblet og egne data er hentet.";
+    return "Elvia er koblet. Egne data hentes direkte fra Elvia.";
   }
 
   if (connection.status === "LINKED_PENDING_FETCH") {
-    return "Elvia er koblet, men vi har ikke fått måleverdier ennå.";
+    return "Elvia er koblet, men vi fant ingen målere ennå.";
   }
 
   if (connection.status === "ERROR") {
