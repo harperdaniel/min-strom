@@ -82,7 +82,7 @@ function Header({
     <header className="site-header">
       <button className="brand-button" onClick={() => navigate("/")} type="button">
         <span className="brand-mark">M</span>
-        <span>Minstrøm</span>
+        <span className="brand-word">Minstrøm</span>
       </button>
       <nav aria-label="Hovedmeny">
         <button
@@ -117,10 +117,10 @@ function LandingPage({ navigate }: { navigate: (route: Route) => void }) {
       <section className="hero-section">
         <div className="hero-copy">
           <p className="eyebrow">Uavhengig forbruksinnsyn</p>
-          <h1>Strømforbruket ditt. Ikke strømselskapets app.</h1>
+          <h1>Strømforbruket ditt, med litt mer puls.</h1>
           <p className="lead">
-            Se og forstå ditt eget strømforbruk på ett sted, helt gratis og uavhengig av
-            hvilken strømleverandør du bruker.
+            Minstrøm samler måledataene dine i et levende, lettlest dashboard, helt
+            uavhengig av hvilken strømleverandør du bruker.
           </p>
           <div className="hero-actions">
             <button
@@ -143,8 +143,13 @@ function LandingPage({ navigate }: { navigate: (route: Route) => void }) {
         </div>
         <div className="hero-snapshot" aria-label="Eksempel på forbruksoversikt">
           <div className="snapshot-topline">
-            <span>Hjemme</span>
+            <span>Hjemme akkurat nå</span>
             <strong>24,7 kWh</strong>
+          </div>
+          <div className="snapshot-energy-line" aria-hidden="true">
+            <span />
+            <span />
+            <span />
           </div>
           <div className="snapshot-bars" aria-hidden="true">
             {[32, 28, 30, 48, 74, 56, 42].map((height, index) => (
@@ -153,6 +158,11 @@ function LandingPage({ navigate }: { navigate: (route: Route) => void }) {
                 style={{ "--bar-height": `${height}%` } as CSSProperties}
               />
             ))}
+          </div>
+          <div className="snapshot-metrics" aria-hidden="true">
+            <span>Lav natt</span>
+            <span>Smart topp</span>
+            <span>Verifisert</span>
           </div>
           <div className="snapshot-note">
             <Clock3 aria-hidden="true" size={18} />
@@ -168,9 +178,9 @@ function LandingPage({ navigate }: { navigate: (route: Route) => void }) {
             <h2>Oversikt skal ikke være en lojalitetsbonus.</h2>
           </div>
           <p>
-            Minstrøm finnes fordi lokketilbud, uklare påslag og skiftende vilkår gjør
-            strøm vanskeligere enn nødvendig. Du skal kunne forstå ditt eget forbruk
-            uten å være bundet til appen til selskapet som selger deg strøm.
+            Minstrøm finnes fordi strømdata fortjener et bedre hjem enn leverandørappen.
+            Vi gjør tallene dine tydelige, uavhengige og nyttige, slik at du kan se hva
+            som faktisk skjer hjemme.
           </p>
         </div>
       </section>
@@ -199,7 +209,7 @@ function LandingPage({ navigate }: { navigate: (route: Route) => void }) {
         </div>
         <div className="trust-item">
           <Trash2 aria-hidden="true" size={24} />
-          <span>Du kan koble fra og slette egne data.</span>
+          <span>Frakobling og sletting bygges inn før offentlig lansering.</span>
         </div>
         <div className="trust-item">
           <CheckCircle2 aria-hidden="true" size={24} />
@@ -335,10 +345,11 @@ function ConnectPage({ navigate }: { navigate: (route: Route) => void }) {
     <main className="connect-layout">
       <section className="connect-main">
         <p className="eyebrow">Koble til datakilde</p>
-        <h1>Start med Elvia nå. Bytt til Elhub-samtykke senere.</h1>
+        <h1>Koble til Elvia, og la tallene våkne.</h1>
         <p className="lead">
           Første prototype bruker personlig token fra nettselskapet. Det er en
-          midlertidig vei inn til dataene, ikke den langsiktige Minstrøm-flyten.
+          midlertidig snarvei inn til ekte data, mens arkitekturen peker mot Elhub og
+          ID-porten senere.
         </p>
 
         <div className="provider-row" role="list" aria-label="Datakilder">
@@ -586,7 +597,8 @@ function DashboardPage() {
           <p className="eyebrow">{status}</p>
           <h1>{dashboard.meterPoint.name}</h1>
           <p className="lead">
-            Forbruk, topper og datakvalitet vises fra normaliserte måleverdier.
+            Forbruk, topper og datakvalitet fra normaliserte måleverdier. Klart nok til
+            å skjønne, levende nok til å følge med.
           </p>
         </div>
         <div className="sync-status">
