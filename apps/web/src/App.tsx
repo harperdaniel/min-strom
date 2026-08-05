@@ -112,15 +112,72 @@ function Header({
 }
 
 function LandingPage({ navigate }: { navigate: (route: Route) => void }) {
+  const routeStops = [
+    {
+      color: "coral",
+      icon: PlugZap,
+      label: "Start",
+      title: "Opprett konto",
+      text: "Et enkelt brukernavn og passord holder for prototypen."
+    },
+    {
+      color: "mint",
+      icon: KeyRound,
+      label: "Elvia",
+      title: "Koble datakilden",
+      text: "Lim inn personlig token fra Elvia, lagret kryptert hos oss."
+    },
+    {
+      color: "sun",
+      icon: Clock3,
+      label: "Sync",
+      title: "Hent måleverdier",
+      text: "Vi normaliserer timesverdier uavhengig av leverandørappen."
+    },
+    {
+      color: "sky",
+      icon: LineChart,
+      label: "Innsikt",
+      title: "Se mønsteret",
+      text: "Dashboardet viser topper, rytme og dagsforbruk i klartekst."
+    }
+  ];
+
+  const promises = [
+    {
+      icon: ShieldCheck,
+      title: "Uavhengig",
+      text: "Bygget rundt dine måledata, ikke strømleverandørens agenda."
+    },
+    {
+      icon: Trash2,
+      title: "Kontroll",
+      text: "Frakobling og sletting bygges inn før offentlig lansering."
+    },
+    {
+      icon: CheckCircle2,
+      title: "Ærlig prototype",
+      text: "Manuell token-flyt nå, klar vei mot Elhub og ID-porten senere."
+    }
+  ];
+
   return (
-    <main>
-      <section className="hero-section">
+    <main className="landing-page">
+      <section className="landing-hero">
+        <div className="landing-kicker" aria-hidden="true">
+          <span className="route-dot coral" />
+          <span>Minstrøm</span>
+          <span className="route-line-short" />
+          <span className="route-dot navy" />
+          <span>Dine data</span>
+        </div>
+
         <div className="hero-copy">
           <p className="eyebrow">Uavhengig forbruksinnsyn</p>
-          <h1>Strømforbruket ditt, med litt mer puls.</h1>
+          <h1>Minstrøm viser hvor strømmen går.</h1>
           <p className="lead">
-            Minstrøm samler måledataene dine i et levende, lettlest dashboard, helt
-            uavhengig av hvilken strømleverandør du bruker.
+            Måledataene dine finnes allerede. Vi gjør dem lettere å lese, leke med og
+            forstå, uavhengig av hvilken strømleverandør du bruker.
           </p>
           <div className="hero-actions">
             <button
@@ -141,80 +198,106 @@ function LandingPage({ navigate }: { navigate: (route: Route) => void }) {
             </button>
           </div>
         </div>
-        <div className="hero-snapshot" aria-label="Eksempel på forbruksoversikt">
-          <div className="snapshot-topline">
-            <span>Hjemme akkurat nå</span>
-            <strong>24,7 kWh</strong>
-          </div>
-          <div className="snapshot-energy-line" aria-hidden="true">
-            <span />
-            <span />
-            <span />
-          </div>
-          <div className="snapshot-bars" aria-hidden="true">
-            {[32, 28, 30, 48, 74, 56, 42].map((height, index) => (
-              <span
-                key={index}
-                style={{ "--bar-height": `${height}%` } as CSSProperties}
-              />
-            ))}
-          </div>
-          <div className="snapshot-metrics" aria-hidden="true">
-            <span>Lav natt</span>
-            <span>Smart topp</span>
-            <span>Verifisert</span>
-          </div>
-          <div className="snapshot-note">
-            <Clock3 aria-hidden="true" size={18} />
-            Mest forbruk mellom kl. 17 og 18
-          </div>
+
+        <div className="route-board" aria-label="Minstrøm onboarding i fire steg">
+          <div className="route-board-track" aria-hidden="true" />
+          {routeStops.map((stop, index) => {
+            const Icon = stop.icon;
+
+            return (
+              <article className={`route-stop ${stop.color}`} key={stop.title}>
+                <span className="route-stop-number">{index + 1}</span>
+                <div className="route-stop-icon">
+                  <Icon aria-hidden="true" size={21} />
+                </div>
+                <p>{stop.label}</p>
+                <h2>{stop.title}</h2>
+                <span>{stop.text}</span>
+              </article>
+            );
+          })}
         </div>
       </section>
 
-      <section className="content-band">
-        <div className="section-grid">
-          <div>
-            <p className="eyebrow">Hvorfor</p>
-            <h2>Oversikt skal ikke være en lojalitetsbonus.</h2>
-          </div>
+      <section className="landing-insight">
+        <div className="insight-copy">
+          <p className="eyebrow">Fra rådata til retning</p>
+          <h2>Et dashboard som føles mer som et kart enn et regneark.</h2>
           <p>
-            Minstrøm finnes fordi strømdata fortjener et bedre hjem enn leverandørappen.
-            Vi gjør tallene dine tydelige, uavhengige og nyttige, slik at du kan se hva
-            som faktisk skjer hjemme.
+            Første versjon starter med Elvia-token fordi det lar oss hente ekte
+            måleverdier nå. Produktet er likevel bygget for at en enklere samtykkeflyt
+            kan overta når vi går videre.
           </p>
         </div>
+
+        <div className="energy-map" aria-label="Eksempel på strømforbruk som rutekart">
+          <div className="map-header">
+            <span>Hjem</span>
+            <strong>24,7 kWh</strong>
+          </div>
+          <div className="map-routes" aria-hidden="true">
+            <span className="map-route horizontal coral" />
+            <span className="map-route vertical mint" />
+            <span className="map-route horizontal sky" />
+            <span className="map-route vertical sun" />
+            <span className="map-node node-a" />
+            <span className="map-node node-b" />
+            <span className="map-node node-c" />
+            <span className="map-node node-d" />
+          </div>
+          <div className="map-legend">
+            {[
+              ["Lav natt", "3,1"],
+              ["Morgentopp", "5,8"],
+              ["Rolig dag", "2,6"],
+              ["Kveld", "8,4"]
+            ].map(([label, value]) => (
+              <span key={label}>
+                <small>{label}</small>
+                <strong>{value} kWh</strong>
+              </span>
+            ))}
+          </div>
+        </div>
       </section>
 
-      <section className="steps-band">
-        <h2>Slik fungerer prototypen</h2>
-        <div className="steps-grid">
-          {[
-            "Opprett en Minstrøm-konto.",
-            "Velg nettselskapet ditt.",
-            "Følg veiledningen og lim inn personlig token.",
-            "Se forbruket ditt i dashboardet."
-          ].map((step, index) => (
-            <div className="step-card" key={step}>
-              <span>{index + 1}</span>
-              <p>{step}</p>
-            </div>
-          ))}
-        </div>
+      <section className="landing-statement">
+        <p>Oversikt skal ikke være en lojalitetsbonus.</p>
+        <h2>
+          Du skal kunne forstå hjemmet ditt uten å være låst til appen til selskapet som
+          tilfeldigvis fakturerer deg.
+        </h2>
       </section>
 
-      <section className="trust-band">
-        <div className="trust-item">
-          <ShieldCheck aria-hidden="true" size={24} />
-          <span>Token vises aldri igjen etter lagring.</span>
+      <section className="promise-rail" aria-label="Produktløfter">
+        {promises.map((promise) => {
+          const Icon = promise.icon;
+
+          return (
+            <article className="promise-item" key={promise.title}>
+              <Icon aria-hidden="true" size={23} />
+              <div>
+                <h2>{promise.title}</h2>
+                <p>{promise.text}</p>
+              </div>
+            </article>
+          );
+        })}
+      </section>
+
+      <section className="landing-cta">
+        <div>
+          <p className="eyebrow">Klar for første måling?</p>
+          <h2>Lag konto, koble Elvia, og se hva vi faktisk får ut.</h2>
         </div>
-        <div className="trust-item">
-          <Trash2 aria-hidden="true" size={24} />
-          <span>Frakobling og sletting bygges inn før offentlig lansering.</span>
-        </div>
-        <div className="trust-item">
-          <CheckCircle2 aria-hidden="true" size={24} />
-          <span>Ingen betalte rangeringer eller skjult leverandørbias.</span>
-        </div>
+        <button
+          className="primary-action"
+          onClick={() => navigate("/connect")}
+          type="button"
+        >
+          <ArrowRight aria-hidden="true" size={20} />
+          Start onboarding
+        </button>
       </section>
     </main>
   );
