@@ -52,6 +52,7 @@ export const authCredentialsRequestSchema = z.object({
 export const elviaLinkStatusSchema = z.enum([
   "NOT_LINKED",
   "LINKED_PENDING_FETCH",
+  "ACTIVE",
   "ERROR"
 ]);
 
@@ -115,7 +116,13 @@ export const elviaConnectionResponseSchema = z.object({
 
 export const elviaLinkResponseSchema = z.object({
   connection: elviaConnectionSchema,
-  validation: credentialValidationResponseSchema
+  validation: credentialValidationResponseSchema,
+  sync: z.object({
+    meterPointCount: z.number().int().nonnegative(),
+    valueCount: z.number().int().nonnegative(),
+    periodFrom: isoDateTimeSchema,
+    periodTo: isoDateTimeSchema
+  })
 });
 
 export const meterPointSchema = z.object({

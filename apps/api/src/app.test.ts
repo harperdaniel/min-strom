@@ -3,10 +3,23 @@ import { randomUUID } from "node:crypto";
 import {
   authResponseSchema,
   credentialValidationResponseSchema,
+  dashboardSummaryResponseSchema,
+  elviaConnectionResponseSchema,
   elviaLinkResponseSchema,
   meResponseSchema,
   providerListResponseSchema
 } from "@minstrom/api-contract";
+import {
+  type ConsumptionProvider,
+  type CredentialValidationResult,
+  type DateRange,
+  type MeterPointDraft,
+  type MeterValueDraft,
+  type ProviderConnectionContext,
+  type ProviderCredentials,
+  type ProviderType
+} from "@minstrom/domain";
+import { type ProviderRegistry } from "@minstrom/providers";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 
@@ -25,7 +38,7 @@ function testConfig(): ApiConfig {
 }
 
 function uniqueUsername(prefix: string): string {
-  return `${prefix}-${randomUUID().slice(0, 8)}`;
+  return prefix + "-" + randomUUID().slice(0, 8);
 }
 
 describe("api", () => {
@@ -42,6 +55,7 @@ describe("api", () => {
     const body = providerListResponseSchema.parse(response.body);
 
     expect(body.providers).toHaveLength(2);
+    expect(body.providers[0]?.status).toBe("AVAILABLE");
     expect(JSON.stringify(body)).not.toContain("token-with");
   });
 
@@ -117,8 +131,10 @@ describe("api", () => {
       .expect(409);
   });
 
-  it("keeps Elvia validation closed until the data spike is complete", async () => {
-    const app = createApp(testConfig());
+  it("validates Elvia tokens through the provider", async () => {
+    const app = createApp(testConfig(), {
+      providerRegistry: createFakeRegistry(new FakeElviaProvider())
+    });
     const response = await request(app)
       .post("/api/connections/elvia/validate")
       .send({ token: "demo-token-with-enough-length" })
@@ -126,14 +142,15 @@ describe("api", () => {
     const body = credentialValidationResponseSchema.parse(response.body);
 
     expect(body).toMatchObject({
-      errorCode: "ELVIA_DATASPIKE_REQUIRED",
       providerType: "ELVIA_TOKEN",
-      valid: false
+      valid: true
     });
   });
 
-  it("only links Elvia tokens for logged-in users and never echoes the token", async () => {
-    const app = createApp(testConfig());
+  it("links Elvia, fetches meter values, and never echoes the token", async () => {
+    const app = createApp(testConfig(), {
+      providerRegistry: createFakeRegistry(new FakeElviaProvider())
+    });
     const token = "demo-token-with-enough-length";
 
     await request(app).post("/api/connections/elvia").send({ token }).expect(401);
@@ -151,10 +168,187 @@ describe("api", () => {
     const body = elviaLinkResponseSchema.parse(response.body);
 
     expect(body.connection).toMatchObject({
-      lastErrorCode: "ELVIA_DATASPIKE_REQUIRED",
+      lastErrorCode: null,
       providerType: "ELVIA_TOKEN",
-      status: "LINKED_PENDING_FETCH"
+      status: "ACTIVE"
+    });
+    expect(body.sync).toMatchObject({
+      meterPointCount: 1,
+      valueCount: 6
     });
     expect(JSON.stringify(body)).not.toContain(token);
   });
+
+  it("returns real dashboard data after Elvia linking", async () => {
+    const app = createApp(testConfig(), {
+      providerRegistry: createFakeRegistry(new FakeElviaProvider())
+    });
+    const agent = request.agent(app);
+
+    await agent
+      .post("/api/auth/register")
+      .send({ password: "strong-password-123", username: uniqueUsername("dash") })
+      .expect(201);
+    await agent
+      .post("/api/connections/elvia")
+      .send({ token: "demo-token-with-enough-length" })
+      .expect(200);
+
+    const response = await agent.get("/api/dashboard").expect(200);
+    const dashboard = dashboardSummaryResponseSchema.parse(response.body);
+
+    expect(dashboard.meterPoint).toMatchObject({
+      gridOwner: "Elvia",
+      name: "Hjemme"
+    });
+    expect(dashboard.hourly).toHaveLength(6);
+    expect(dashboard.totals.todayKwh).toBeGreaterThan(0);
+  });
+
+  it("marks the Elvia connection as errored when sync fails", async () => {
+    const app = createApp(testConfig(), {
+      providerRegistry: createFakeRegistry(
+        new FakeElviaProvider({
+          failSync: true
+        })
+      )
+    });
+    const agent = request.agent(app);
+
+    await agent
+      .post("/api/auth/register")
+      .send({ password: "strong-password-123", username: uniqueUsername("fail") })
+      .expect(201);
+
+    await agent
+      .post("/api/connections/elvia")
+      .send({ token: "demo-token-with-enough-length" })
+      .expect(502);
+
+    const response = await agent.get("/api/connections").expect(200);
+    const body = elviaConnectionResponseSchema.parse(response.body);
+
+    expect(body.connection).toMatchObject({
+      lastErrorCode: "ELVIA_SYNC_FAILED",
+      status: "ERROR"
+    });
+  });
+
+  it("rejects invalid Elvia tokens without storing a connection", async () => {
+    const app = createApp(testConfig(), {
+      providerRegistry: createFakeRegistry(
+        new FakeElviaProvider({
+          valid: false
+        })
+      )
+    });
+    const agent = request.agent(app);
+
+    await agent
+      .post("/api/auth/register")
+      .send({ password: "strong-password-123", username: uniqueUsername("bad") })
+      .expect(201);
+
+    await agent
+      .post("/api/connections/elvia")
+      .send({ token: "demo-token-with-enough-length" })
+      .expect(400);
+
+    await agent.get("/api/dashboard").expect(404);
+  });
 });
+
+class FakeElviaProvider implements ConsumptionProvider {
+  readonly type = "ELVIA_TOKEN";
+
+  private readonly failSync: boolean;
+  private readonly valid: boolean;
+
+  constructor(options: { failSync?: boolean; valid?: boolean } = {}) {
+    this.failSync = options.failSync ?? false;
+    this.valid = options.valid ?? true;
+  }
+
+  validateCredentials(
+    credentials: ProviderCredentials
+  ): Promise<CredentialValidationResult> {
+    return Promise.resolve({
+      errorCode:
+        credentials.type === "ELVIA_TOKEN" && this.valid
+          ? undefined
+          : "ELVIA_TOKEN_REJECTED",
+      providerType: "ELVIA_TOKEN",
+      userMessage:
+        credentials.type === "ELVIA_TOKEN" && this.valid
+          ? "Elvia-tokenet er gyldig."
+          : "Elvia avviste tokenet.",
+      valid: credentials.type === "ELVIA_TOKEN" && this.valid
+    });
+  }
+
+  listMeterPoints(_connection: ProviderConnectionContext): Promise<MeterPointDraft[]> {
+    void _connection;
+
+    if (this.failSync) {
+      throw new Error("Fake Elvia sync failed.");
+    }
+
+    return Promise.resolve([
+      {
+        activeFrom: new Date("2026-01-01T00:00:00.000Z"),
+        activeTo: null,
+        address: null,
+        consumptionType: "Privatbolig",
+        externalMeterPointId: "707057500000000001",
+        gridOwner: "Elvia",
+        name: "Hjemme",
+        priceArea: "NO1"
+      }
+    ]);
+  }
+
+  getMeterValues(
+    _connection: ProviderConnectionContext,
+    meterPointId: string,
+    period: DateRange
+  ): Promise<MeterValueDraft[]> {
+    void _connection;
+
+    const latestDay = new Date(period.to);
+    latestDay.setUTCHours(0, 0, 0, 0);
+
+    return Promise.resolve(
+      Array.from({ length: 6 }, (_, hour) => {
+        const intervalStart = new Date(latestDay);
+        intervalStart.setUTCHours(hour + 12);
+        const intervalEnd = new Date(intervalStart);
+        intervalEnd.setUTCHours(intervalEnd.getUTCHours() + 1);
+
+        return {
+          direction: "CONSUMPTION" as const,
+          intervalEnd,
+          intervalStart,
+          meterPointId,
+          quality: "VERIFIED" as const,
+          sourceRevision: "fake-elvia-v1",
+          valueKwh: 1 + hour / 10
+        };
+      })
+    );
+  }
+}
+
+function createFakeRegistry(provider: ConsumptionProvider): ProviderRegistry {
+  return {
+    get(type: ProviderType) {
+      if (type !== provider.type) {
+        throw new Error("Unexpected provider type: " + type);
+      }
+
+      return provider;
+    },
+    list() {
+      return [provider];
+    }
+  };
+}

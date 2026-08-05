@@ -1,4 +1,9 @@
-import { PostgresUserRepository, runUserMigrations } from "@minstrom/database";
+import {
+  PostgresEnergyDataRepository,
+  PostgresUserRepository,
+  runEnergyMigrations,
+  runUserMigrations
+} from "@minstrom/database";
 
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
@@ -11,8 +16,10 @@ async function main(): Promise<void> {
   }
 
   await runUserMigrations(config.DATABASE_URL);
+  await runEnergyMigrations(config.DATABASE_URL);
 
   const app = createApp(config, {
+    energy: new PostgresEnergyDataRepository(config.DATABASE_URL),
     users: new PostgresUserRepository(config.DATABASE_URL)
   });
 

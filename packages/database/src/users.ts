@@ -3,6 +3,7 @@ import { Pool, type PoolClient, type PoolConfig } from "pg";
 export const ELVIA_LINK_STATUSES = [
   "NOT_LINKED",
   "LINKED_PENDING_FETCH",
+  "ACTIVE",
   "ERROR"
 ] as const;
 

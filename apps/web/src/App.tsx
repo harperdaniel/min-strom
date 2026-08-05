@@ -20,6 +20,7 @@ import {
 } from "react";
 
 import {
+  fetchDashboard,
   fetchDemoDashboard,
   fetchElviaConnection,
   fetchMe,
@@ -319,10 +320,7 @@ function ConnectPage({ navigate }: { navigate: (route: Route) => void }) {
       const result = await linkElviaToken(token);
       setConnection(result.connection);
       setToken("");
-      setTokenStatus(
-        result.validation.userMessage ??
-          "Elvia-tokenet er lagret. Datahenting kobles på i neste steg."
-      );
+      setTokenStatus(describeSyncResult(result.sync));
     } catch (error) {
       setToken("");
       setTokenStatus(
@@ -498,16 +496,37 @@ function ConnectPage({ navigate }: { navigate: (route: Route) => void }) {
           type="button"
         >
           <LineChart aria-hidden="true" size={18} />
-          Åpne demo-dashboard
+          Åpne dashboard
         </button>
       </aside>
     </main>
   );
 }
 
+function describeSyncResult(sync: {
+  meterPointCount: number;
+  valueCount: number;
+}): string {
+  if (sync.valueCount > 0) {
+    return `Elvia er koblet. Vi hentet ${sync.valueCount} måleverdier fra ${sync.meterPointCount} måler${
+      sync.meterPointCount === 1 ? "" : "e"
+    }.`;
+  }
+
+  if (sync.meterPointCount > 0) {
+    return "Elvia er koblet, men Elvia returnerte ingen måleverdier for perioden ennå.";
+  }
+
+  return "Tokenet ble godtatt, men Elvia returnerte ingen målere ennå.";
+}
+
 function describeConnection(connection: ElviaConnectionResponse["connection"]): string {
+  if (connection.status === "ACTIVE") {
+    return "Elvia er koblet og egne data er hentet.";
+  }
+
   if (connection.status === "LINKED_PENDING_FETCH") {
-    return "Elvia er koblet. Datahenting venter på neste dataspike.";
+    return "Elvia er koblet, men vi har ikke fått måleverdier ennå.";
   }
 
   if (connection.status === "ERROR") {
@@ -519,23 +538,32 @@ function describeConnection(connection: ElviaConnectionResponse["connection"]): 
 
 function DashboardPage() {
   const [dashboard, setDashboard] = useState(createFallbackDashboard);
-  const [status, setStatus] = useState("Laster demo");
+  const [status, setStatus] = useState("Laster egne data");
 
   useEffect(() => {
     let isMounted = true;
 
-    fetchDemoDashboard()
+    fetchDashboard()
       .then((data) => {
         if (isMounted) {
           setDashboard(data);
-          setStatus("Demo-data");
+          setStatus("Egne Elvia-data");
         }
       })
-      .catch(() => {
-        if (isMounted) {
-          setStatus("Lokal demo");
-        }
-      });
+      .catch(() =>
+        fetchDemoDashboard()
+          .then((data) => {
+            if (isMounted) {
+              setDashboard(data);
+              setStatus("Demo-data");
+            }
+          })
+          .catch(() => {
+            if (isMounted) {
+              setStatus("Lokal demo");
+            }
+          })
+      );
 
     return () => {
       isMounted = false;
@@ -568,7 +596,7 @@ function DashboardPage() {
       </section>
 
       <section className="metric-grid" aria-label="Nøkkeltall">
-        <Metric label="I dag" value={`${dashboard.totals.todayKwh} kWh`} />
+        <Metric label="Siste døgn" value={`${dashboard.totals.todayKwh} kWh`} />
         <Metric label="Siste 7 dager" value={`${dashboard.totals.last7DaysKwh} kWh`} />
         <Metric label="Denne måneden" value={`${dashboard.totals.monthKwh} kWh`} />
         <Metric

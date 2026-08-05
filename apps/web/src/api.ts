@@ -19,6 +19,19 @@ const API_BASE_URL =
     ? apiBaseUrlFromEnv
     : "http://localhost:3000";
 
+export async function fetchDashboard(): Promise<DashboardSummaryResponse> {
+  const response = await fetch(API_BASE_URL + "/api/dashboard", {
+    credentials: "include"
+  });
+  const body = await parseJson(response, "Kunne ikke hente dashboarddata.");
+
+  if (!response.ok) {
+    throw new Error(readErrorMessage(body, "Kunne ikke hente dashboarddata."));
+  }
+
+  return dashboardSummaryResponseSchema.parse(body);
+}
+
 export async function fetchDemoDashboard(): Promise<DashboardSummaryResponse> {
   const response = await fetch(API_BASE_URL + "/api/demo/dashboard", {
     credentials: "include"

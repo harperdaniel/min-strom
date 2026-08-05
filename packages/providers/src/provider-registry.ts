@@ -5,6 +5,7 @@ import { MockConsumptionProvider } from "./mock-provider.js";
 
 export interface ProviderRegistryOptions {
   elviaBaseUrl?: string;
+  elviaFetchImpl?: typeof fetch;
 }
 
 export interface ProviderRegistry {
@@ -17,7 +18,13 @@ export function createProviderRegistry(
 ): ProviderRegistry {
   const providers = new Map<ProviderType, ConsumptionProvider>([
     ["MOCK", new MockConsumptionProvider()],
-    ["ELVIA_TOKEN", new ElviaProvider({ baseUrl: options.elviaBaseUrl })]
+    [
+      "ELVIA_TOKEN",
+      new ElviaProvider({
+        baseUrl: options.elviaBaseUrl,
+        fetchImpl: options.elviaFetchImpl
+      })
+    ]
   ]);
 
   return {

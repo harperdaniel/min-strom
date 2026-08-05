@@ -1,4 +1,4 @@
-import { createCipheriv, createHash, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 
 import { type ApiConfig } from "./config.js";
 
@@ -17,6 +17,31 @@ export function encryptCredential(plaintext: string, config: ApiConfig): string 
     tag.toString("base64url"),
     encrypted.toString("base64url")
   ].join(":");
+}
+
+export function decryptCredential(payload: string, config: ApiConfig): string {
+  const [version, ivBase64, tagBase64, encryptedBase64] = payload.split(":");
+
+  if (
+    version !== `v${credentialKeyVersion}` ||
+    !ivBase64 ||
+    !tagBase64 ||
+    !encryptedBase64
+  ) {
+    throw new Error("Credential payload has an unsupported format.");
+  }
+
+  const decipher = createDecipheriv(
+    "aes-256-gcm",
+    getCredentialEncryptionKey(config),
+    Buffer.from(ivBase64, "base64url")
+  );
+  decipher.setAuthTag(Buffer.from(tagBase64, "base64url"));
+
+  return Buffer.concat([
+    decipher.update(Buffer.from(encryptedBase64, "base64url")),
+    decipher.final()
+  ]).toString("utf8");
 }
 
 function getCredentialEncryptionKey(config: ApiConfig): Buffer {

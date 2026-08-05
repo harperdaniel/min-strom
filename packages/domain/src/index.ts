@@ -18,7 +18,7 @@ export interface User {
   username: string;
   passwordHash: string;
   passwordSalt: string;
-  elviaLinkStatus: "NOT_LINKED" | "LINKED_PENDING_FETCH" | "ERROR";
+  elviaLinkStatus: "NOT_LINKED" | "LINKED_PENDING_FETCH" | "ACTIVE" | "ERROR";
   elviaLinkedAt: Date | null;
   elviaLastErrorCode: string | null;
   lastLoginAt: Date | null;

@@ -47,8 +47,7 @@ export function errorHandler(
     response.status(503).json({
       error: {
         code: error.code,
-        message:
-          "Datakilden er ikke ferdig verifisert ennå. Vi må gjøre en kontrollert dataspike før ekte tokens tas imot."
+        message: "Datakilden svarte ikke som forventet. Prøv igjen litt senere."
       }
     });
     return;
