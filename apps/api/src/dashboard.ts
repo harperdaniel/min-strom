@@ -97,53 +97,197 @@ function createDailyTotals(
     .sort((left, right) => left.date.localeCompare(right.date));
 }
 
-function createMonthlyConsumption(
+export function createMonthlyConsumption(
   values: MeterValueRecord[],
   now: Date
 ): DashboardSummaryResponse["monthly"] {
   const currentYear = now.getUTCFullYear();
   const lastYear = currentYear - 1;
   const currentMonth = now.getUTCMonth();
-  const thisYearTotals = Array.from({ length: 12 }, () => 0);
-  const lastYearTotals = Array.from({ length: 12 }, () => 0);
-  const thisYearHasData = Array.from({ length: 12 }, () => false);
-  const lastYearHasData = Array.from({ length: 12 }, () => false);
-  const currentYearDataDays = new Set<string>();
+  const monthlyTotals = createMonthlyTotals(values);
+  const trendFactor = calculateConsumptionTrendFactor(
+    monthlyTotals,
+    currentYear,
+    currentMonth
+  );
+
+  return monthLabels.map((label, index) => {
+    const thisYearTotal = getMonthTotal(monthlyTotals, currentYear, index);
+    const lastYearTotal = getMonthTotal(monthlyTotals, lastYear, index);
+    const hasThisYearData = hasMonthTotal(monthlyTotals, currentYear, index);
+    const hasLastYearData = hasMonthTotal(monthlyTotals, lastYear, index);
+
+    return {
+      estimatedKwh: estimateMonthlyConsumption({
+        currentMonth,
+        currentYear,
+        lastYearTotal,
+        hasLastYearData,
+        hasThisYearData,
+        monthIndex: index,
+        now,
+        thisYearTotal,
+        trendFactor,
+        values
+      }),
+      label,
+      lastYearKwh: hasLastYearData ? roundKwh(lastYearTotal) : null,
+      month: index + 1,
+      thisYearKwh: hasThisYearData ? roundKwh(thisYearTotal) : null
+    };
+  });
+}
+
+type MonthlyTotals = Map<string, number>;
+
+function createMonthlyTotals(values: MeterValueRecord[]): MonthlyTotals {
+  const totals: MonthlyTotals = new Map();
 
   for (const value of values) {
-    const year = value.intervalStart.getUTCFullYear();
-    const month = value.intervalStart.getUTCMonth();
-
-    if (year === currentYear) {
-      thisYearTotals[month] = (thisYearTotals[month] ?? 0) + value.valueKwh;
-      thisYearHasData[month] = true;
-      currentYearDataDays.add(formatOsloDate(value.intervalStart));
-    }
-
-    if (year === lastYear) {
-      lastYearTotals[month] = (lastYearTotals[month] ?? 0) + value.valueKwh;
-      lastYearHasData[month] = true;
-    }
+    const key = monthKey(
+      value.intervalStart.getUTCFullYear(),
+      value.intervalStart.getUTCMonth()
+    );
+    totals.set(key, (totals.get(key) ?? 0) + value.valueKwh);
   }
 
-  const thisYearTotal = thisYearTotals.reduce((total, value) => total + value, 0);
-  const averageDailyKwh =
-    currentYearDataDays.size > 0 ? thisYearTotal / currentYearDataDays.size : 0;
+  return totals;
+}
 
-  return monthLabels.map((label, index) => ({
-    estimatedKwh:
-      averageDailyKwh > 0 && index >= currentMonth
-        ? roundKwh(
-            index === currentMonth
-              ? (thisYearTotals[index] ?? 0)
-              : averageDailyKwh * daysInUtcMonth(currentYear, index)
-          )
-        : null,
-    label,
-    lastYearKwh: lastYearHasData[index] ? roundKwh(lastYearTotals[index] ?? 0) : null,
-    month: index + 1,
-    thisYearKwh: thisYearHasData[index] ? roundKwh(thisYearTotals[index] ?? 0) : null
-  }));
+function calculateConsumptionTrendFactor(
+  totals: MonthlyTotals,
+  currentYear: number,
+  currentMonth: number
+): number {
+  let weightedThisPeriod = 0;
+  let weightedPreviousPeriod = 0;
+
+  for (let offset = 1; offset <= 4; offset += 1) {
+    const recentMonth = addUtcMonths(currentYear, currentMonth, -offset);
+    const comparisonMonth = addUtcMonths(recentMonth.year, recentMonth.month, -12);
+    const recentTotal = getMonthTotal(totals, recentMonth.year, recentMonth.month);
+    const comparisonTotal = getMonthTotal(
+      totals,
+      comparisonMonth.year,
+      comparisonMonth.month
+    );
+
+    if (recentTotal <= 0 || comparisonTotal <= 0) {
+      continue;
+    }
+
+    const weight = 5 - offset;
+    weightedThisPeriod += recentTotal * weight;
+    weightedPreviousPeriod += comparisonTotal * weight;
+  }
+
+  if (weightedPreviousPeriod <= 0) {
+    return 1;
+  }
+
+  return clamp(weightedThisPeriod / weightedPreviousPeriod, 0.65, 1.45);
+}
+
+function estimateMonthlyConsumption(input: {
+  currentMonth: number;
+  currentYear: number;
+  hasLastYearData: boolean;
+  hasThisYearData: boolean;
+  lastYearTotal: number;
+  monthIndex: number;
+  now: Date;
+  thisYearTotal: number;
+  trendFactor: number;
+  values: MeterValueRecord[];
+}): number | null {
+  if (input.monthIndex < input.currentMonth) {
+    return null;
+  }
+
+  if (!input.hasLastYearData) {
+    return input.monthIndex === input.currentMonth && input.hasThisYearData
+      ? roundKwh(input.thisYearTotal)
+      : null;
+  }
+
+  if (input.monthIndex === input.currentMonth) {
+    const remainingLastYearKwh = calculateRemainingEquivalentMonthTotal(
+      input.values,
+      input.currentYear - 1,
+      input.monthIndex,
+      input.now
+    );
+
+    return roundKwh(input.thisYearTotal + remainingLastYearKwh * input.trendFactor);
+  }
+
+  return roundKwh(input.lastYearTotal * input.trendFactor);
+}
+
+function calculateRemainingEquivalentMonthTotal(
+  values: MeterValueRecord[],
+  year: number,
+  month: number,
+  now: Date
+): number {
+  return values
+    .filter((value) => {
+      const interval = value.intervalStart;
+
+      return (
+        interval.getUTCFullYear() === year &&
+        interval.getUTCMonth() === month &&
+        isAfterEquivalentMonthProgress(interval, now)
+      );
+    })
+    .reduce((total, value) => total + value.valueKwh, 0);
+}
+
+function isAfterEquivalentMonthProgress(value: Date, now: Date): boolean {
+  const valueDay = value.getUTCDate();
+  const currentDay = Math.min(
+    now.getUTCDate(),
+    daysInUtcMonth(value.getUTCFullYear(), value.getUTCMonth())
+  );
+
+  if (valueDay !== currentDay) {
+    return valueDay > currentDay;
+  }
+
+  if (value.getUTCHours() !== now.getUTCHours()) {
+    return value.getUTCHours() > now.getUTCHours();
+  }
+
+  return value.getUTCMinutes() > now.getUTCMinutes();
+}
+
+function getMonthTotal(totals: MonthlyTotals, year: number, month: number): number {
+  return totals.get(monthKey(year, month)) ?? 0;
+}
+
+function hasMonthTotal(totals: MonthlyTotals, year: number, month: number): boolean {
+  return totals.has(monthKey(year, month));
+}
+
+function monthKey(year: number, month: number): string {
+  return year + "-" + String(month + 1).padStart(2, "0");
+}
+
+function addUtcMonths(
+  year: number,
+  month: number,
+  delta: number
+): { month: number; year: number } {
+  const date = new Date(Date.UTC(year, month + delta, 1));
+
+  return {
+    month: date.getUTCMonth(),
+    year: date.getUTCFullYear()
+  };
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
 }
 
 const monthLabels = [

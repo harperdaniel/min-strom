@@ -23,7 +23,7 @@ import { type ProviderRegistry } from "@minstrom/providers";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 
-import { createApp } from "./app.js";
+import { createApp, createDashboardPeriod } from "./app.js";
 import { type ApiConfig } from "./config.js";
 
 function testConfig(): ApiConfig {
@@ -177,6 +177,14 @@ describe("api", () => {
     expect(body.sync.valueCount).toBe(0);
     expect(provider.meterValueRequestCount).toBe(0);
     expect(JSON.stringify(body)).not.toContain(token);
+  });
+
+  it("fetches enough history for January forecast comparisons", () => {
+    const januaryPeriod = createDashboardPeriod(new Date("2026-01-15T12:00:00.000Z"));
+    const augustPeriod = createDashboardPeriod(new Date("2026-08-15T12:00:00.000Z"));
+
+    expect(januaryPeriod.from.toISOString()).toBe("2024-09-01T00:00:00.000Z");
+    expect(augustPeriod.from.toISOString()).toBe("2025-01-01T00:00:00.000Z");
   });
 
   it("returns real dashboard data after Elvia linking", async () => {

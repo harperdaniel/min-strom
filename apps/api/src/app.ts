@@ -557,18 +557,31 @@ async function fetchLiveDashboardSource(input: {
   }
 }
 
-function createDashboardPeriod(now = new Date()): DateRange {
+export function createDashboardPeriod(now = new Date()): DateRange {
   const to = new Date(now);
   to.setUTCHours(to.getUTCHours() + 1, 0, 0, 0);
 
   return {
-    from: createStartOfPreviousYear(to),
+    from: createDashboardFetchStart(to),
     to
   };
 }
 
-function createStartOfPreviousYear(value: Date): Date {
-  return new Date(Date.UTC(value.getUTCFullYear() - 1, 0, 1, 0, 0, 0, 0));
+function createDashboardFetchStart(value: Date): Date {
+  const displayStart = new Date(Date.UTC(value.getUTCFullYear() - 1, 0, 1, 0, 0, 0, 0));
+  const earliestTrendComparison = addUtcMonths(
+    value.getUTCFullYear(),
+    value.getUTCMonth(),
+    -16
+  );
+
+  return displayStart < earliestTrendComparison
+    ? displayStart
+    : earliestTrendComparison;
+}
+
+function addUtcMonths(year: number, month: number, delta: number): Date {
+  return new Date(Date.UTC(year, month + delta, 1, 0, 0, 0, 0));
 }
 
 function createMonthlySyncPeriods(period: DateRange): DateRange[] {
