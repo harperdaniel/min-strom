@@ -63,6 +63,7 @@ export function createDemoDashboard(now = new Date()): DashboardSummaryResponse 
     daily,
     hourly,
     lastSuccessfulSyncAt: toIso(now),
+    monthly: createDemoMonthly(now),
     meterPoint: {
       address: null,
       connectionId: "demo-connection",
@@ -83,4 +84,61 @@ export function createDemoDashboard(now = new Date()): DashboardSummaryResponse 
       )
     }
   };
+}
+
+function createDemoMonthly(now: Date): DashboardSummaryResponse["monthly"] {
+  const currentMonth = now.getUTCMonth();
+  const labels = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "Mai",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Okt",
+    "Nov",
+    "Des"
+  ];
+  const thisYear: Array<number | null> = [
+    812,
+    744,
+    698,
+    572,
+    448,
+    332,
+    286,
+    164,
+    null,
+    null,
+    null,
+    null
+  ];
+  const lastYear: Array<number | null> = [
+    876, 801, 724, 611, 462, 351, 302, 276, 388, 516, 688, 834
+  ];
+  const estimate: Array<number | null> = [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    164,
+    322,
+    333,
+    322,
+    333
+  ];
+
+  return labels.map((label, index) => ({
+    estimatedKwh: index >= currentMonth ? (estimate[index] ?? null) : null,
+    label,
+    lastYearKwh: lastYear[index] ?? null,
+    month: index + 1,
+    thisYearKwh: thisYear[index] ?? null
+  }));
 }

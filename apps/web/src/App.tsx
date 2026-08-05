@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  BarChart3,
   CheckCircle2,
   Clock3,
   KeyRound,
@@ -10,7 +11,11 @@ import {
   ShieldCheck,
   Trash2
 } from "lucide-react";
-import { type AuthUser, type ElviaConnectionResponse } from "@minstrom/api-contract";
+import {
+  type AuthUser,
+  type DashboardSummaryResponse,
+  type ElviaConnectionResponse
+} from "@minstrom/api-contract";
 import {
   type CSSProperties,
   type FormEvent,
@@ -684,6 +689,7 @@ function describeConnection(connection: ElviaConnectionResponse["connection"]): 
 function DashboardPage() {
   const [dashboard, setDashboard] = useState(createFallbackDashboard);
   const [status, setStatus] = useState("Laster egne data");
+  const [yearChartMode, setYearChartMode] = useState<"line" | "bar">("line");
 
   useEffect(() => {
     let isMounted = true;
@@ -740,6 +746,12 @@ function DashboardPage() {
           Sist synkronisert {formatDateTime(dashboard.lastSuccessfulSyncAt)}
         </div>
       </section>
+
+      <YearConsumptionChart
+        mode={yearChartMode}
+        monthly={dashboard.monthly}
+        setMode={setYearChartMode}
+      />
 
       <section className="metric-grid" aria-label="Nøkkeltall">
         <Metric label="Siste døgn" value={`${dashboard.totals.todayKwh} kWh`} />
@@ -813,6 +825,275 @@ function Metric({ label, value }: { label: string; value: string }) {
       <strong>{value}</strong>
     </div>
   );
+}
+
+function YearConsumptionChart({
+  mode,
+  monthly,
+  setMode
+}: {
+  mode: "line" | "bar";
+  monthly: DashboardMonthly;
+  setMode: (mode: "line" | "bar") => void;
+}) {
+  const chart = useMemo(() => createYearChartModel(monthly), [monthly]);
+
+  return (
+    <section className="year-chart-section" aria-label="Månedsforbruk så langt i år">
+      <div className="chart-heading year-chart-heading">
+        <div>
+          <p className="eyebrow">Årsforbruk</p>
+          <h2>Månedsforbruk så langt i år</h2>
+        </div>
+        <div className="chart-toolbar">
+          <div className="chart-legend" aria-hidden="true">
+            <span className="legend-item this-year">I år</span>
+            <span className="legend-item last-year">I fjor</span>
+            <span className="legend-item estimate">Estimert</span>
+          </div>
+          <div className="chart-toggle" aria-label="Diagramtype" role="tablist">
+            <button
+              aria-selected={mode === "line"}
+              onClick={() => setMode("line")}
+              role="tab"
+              type="button"
+            >
+              <LineChart aria-hidden="true" size={17} />
+              Linje
+            </button>
+            <button
+              aria-selected={mode === "bar"}
+              onClick={() => setMode("bar")}
+              role="tab"
+              type="button"
+            >
+              <BarChart3 aria-hidden="true" size={17} />
+              Søyle
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {mode === "line" ? (
+        <YearLineChart chart={chart} />
+      ) : (
+        <YearBarChart chart={chart} />
+      )}
+    </section>
+  );
+}
+
+type DashboardMonthly = DashboardSummaryResponse["monthly"];
+
+type ChartPoint = {
+  label: string;
+  value: number;
+  x: number;
+  y: number;
+};
+
+type YearChartModel = {
+  estimated: ChartPoint[];
+  height: number;
+  labels: string[];
+  lastYear: ChartPoint[];
+  maxValue: number;
+  thisYear: ChartPoint[];
+  width: number;
+};
+
+function YearLineChart({ chart }: { chart: YearChartModel }) {
+  return (
+    <div className="year-chart-frame line-mode">
+      <svg aria-hidden="true" viewBox={"0 0 " + chart.width + " " + chart.height}>
+        {createGridLines().map((line) => (
+          <line
+            className="chart-grid-line"
+            key={line}
+            x1="44"
+            x2="700"
+            y1={line}
+            y2={line}
+          />
+        ))}
+        <path className="chart-line last-year" d={createSmoothPath(chart.lastYear)} />
+        <path className="chart-line this-year" d={createSmoothPath(chart.thisYear)} />
+        <path className="chart-line estimate" d={createSmoothPath(chart.estimated)} />
+        {[...chart.lastYear, ...chart.thisYear, ...chart.estimated].map(
+          (point, index) => (
+            <circle
+              className="chart-point"
+              cx={point.x}
+              cy={point.y}
+              key={point.label + "-" + point.value + "-" + index}
+              r="3.5"
+            />
+          )
+        )}
+      </svg>
+      <ChartMonthLabels labels={chart.labels} />
+    </div>
+  );
+}
+
+function YearBarChart({ chart }: { chart: YearChartModel }) {
+  const maxHeight = 214;
+
+  return (
+    <div className="year-chart-frame bar-mode">
+      <div className="year-bars" aria-hidden="true">
+        {chart.labels.map((label) => {
+          const thisYear = chart.thisYear.find((point) => point.label === label);
+          const lastYear = chart.lastYear.find((point) => point.label === label);
+          const estimate = chart.estimated.find((point) => point.label === label);
+
+          return (
+            <div className="year-bar-group" key={label}>
+              <span
+                className="year-bar this-year"
+                style={
+                  {
+                    "--bar-height":
+                      (((thisYear?.value ?? 0) / chart.maxValue) * maxHeight).toFixed(
+                        1
+                      ) + "px"
+                  } as CSSProperties
+                }
+              />
+              <span
+                className="year-bar last-year"
+                style={
+                  {
+                    "--bar-height":
+                      (((lastYear?.value ?? 0) / chart.maxValue) * maxHeight).toFixed(
+                        1
+                      ) + "px"
+                  } as CSSProperties
+                }
+              />
+              <span
+                className="year-bar estimate"
+                style={
+                  {
+                    "--bar-height":
+                      (((estimate?.value ?? 0) / chart.maxValue) * maxHeight).toFixed(
+                        1
+                      ) + "px"
+                  } as CSSProperties
+                }
+              />
+            </div>
+          );
+        })}
+      </div>
+      <ChartMonthLabels labels={chart.labels} />
+    </div>
+  );
+}
+
+function ChartMonthLabels({ labels }: { labels: string[] }) {
+  return (
+    <div className="chart-month-labels" aria-hidden="true">
+      {labels.map((label) => (
+        <span key={label}>{label}</span>
+      ))}
+    </div>
+  );
+}
+
+function createYearChartModel(monthly: DashboardMonthly): YearChartModel {
+  const width = 744;
+  const height = 300;
+  const left = 44;
+  const right = 44;
+  const top = 26;
+  const bottom = 48;
+  const labels = monthly.map((month) => month.label);
+  const allValues = monthly.flatMap((month) =>
+    [month.thisYearKwh, month.lastYearKwh, month.estimatedKwh].filter(
+      (value): value is number => typeof value === "number"
+    )
+  );
+  const maxValue = Math.max(1, ...allValues) * 1.12;
+  const xForIndex = (index: number) => left + (index * (width - left - right)) / 11;
+  const yForValue = (value: number) =>
+    height - bottom - (value / maxValue) * (height - top - bottom);
+  const toPoint = (label: string, value: number, index: number): ChartPoint => ({
+    label,
+    value,
+    x: xForIndex(index),
+    y: yForValue(value)
+  });
+
+  return {
+    estimated: monthly.flatMap((month, index) =>
+      month.estimatedKwh === null
+        ? []
+        : [toPoint(month.label, month.estimatedKwh, index)]
+    ),
+    height,
+    labels,
+    lastYear: monthly.flatMap((month, index) =>
+      month.lastYearKwh === null ? [] : [toPoint(month.label, month.lastYearKwh, index)]
+    ),
+    maxValue,
+    thisYear: monthly.flatMap((month, index) =>
+      month.thisYearKwh === null ? [] : [toPoint(month.label, month.thisYearKwh, index)]
+    ),
+    width
+  };
+}
+
+function createGridLines(): number[] {
+  return [0.25, 0.5, 0.75, 1].map((ratio) => 252 - ratio * 214);
+}
+
+function createSmoothPath(points: ChartPoint[]): string {
+  if (points.length === 0) {
+    return "";
+  }
+
+  if (points.length === 1) {
+    const point = points[0];
+
+    if (!point) {
+      return "";
+    }
+
+    return (
+      "M " + (point.x - 0.1) + " " + point.y + " L " + (point.x + 0.1) + " " + point.y
+    );
+  }
+
+  return points.reduce((path, point, index) => {
+    if (index === 0) {
+      return "M " + point.x + " " + point.y;
+    }
+
+    const previous = points[index - 1];
+
+    if (!previous) {
+      return path;
+    }
+
+    const controlDistance = (point.x - previous.x) / 2;
+
+    return (
+      path +
+      " C " +
+      (previous.x + controlDistance) +
+      " " +
+      previous.y +
+      ", " +
+      (point.x - controlDistance) +
+      " " +
+      point.y +
+      ", " +
+      point.x +
+      " " +
+      point.y
+    );
+  }, "");
 }
 
 function formatDateTime(value: string | null): string {

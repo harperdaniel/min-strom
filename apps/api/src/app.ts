@@ -433,11 +433,17 @@ async function syncElviaData(input: {
         input.connectionId,
         meterPointDraft
       );
-      const providerValues = await provider.getMeterValues(
-        context,
-        meterPointDraft.externalMeterPointId,
-        period
-      );
+      const providerValues = (
+        await Promise.all(
+          createMonthlySyncPeriods(period).map((syncPeriod) =>
+            provider.getMeterValues(
+              context,
+              meterPointDraft.externalMeterPointId,
+              syncPeriod
+            )
+          )
+        )
+      ).flat();
       const values = providerValues.map<MeterValueDraft>((value) => ({
         ...value,
         meterPointId: meterPoint.id
@@ -500,20 +506,40 @@ function createInitialSyncPeriod(now = new Date()): DateRange {
   const to = new Date(now);
   to.setUTCMinutes(0, 0, 0);
 
-  const from = new Date(to);
-  from.setUTCDate(from.getUTCDate() - 30);
-
-  return { from, to };
+  return {
+    from: createStartOfPreviousYear(to),
+    to
+  };
 }
 
 function createDashboardPeriod(now = new Date()): DateRange {
   const to = new Date(now);
   to.setUTCHours(to.getUTCHours() + 1, 0, 0, 0);
 
-  const from = new Date(to);
-  from.setUTCDate(from.getUTCDate() - 45);
+  return {
+    from: createStartOfPreviousYear(to),
+    to
+  };
+}
 
-  return { from, to };
+function createStartOfPreviousYear(value: Date): Date {
+  return new Date(Date.UTC(value.getUTCFullYear() - 1, 0, 1, 0, 0, 0, 0));
+}
+
+function createMonthlySyncPeriods(period: DateRange): DateRange[] {
+  const periods: DateRange[] = [];
+  let cursor = new Date(period.from);
+
+  while (cursor < period.to) {
+    const next = new Date(
+      Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1)
+    );
+    const to = next < period.to ? next : period.to;
+    periods.push({ from: new Date(cursor), to });
+    cursor = to;
+  }
+
+  return periods;
 }
 
 function toSyncErrorCode(error: unknown): string {

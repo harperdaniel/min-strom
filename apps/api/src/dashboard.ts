@@ -48,6 +48,7 @@ export function createDashboardFromSource(
       source.connection.lastSuccessfulSyncAt?.toISOString() ??
       source.connection.lastSyncAt?.toISOString() ??
       null,
+    monthly: createMonthlyConsumption(values, new Date()),
     meterPoint: {
       address: source.meterPoint.address,
       connectionId: source.meterPoint.connectionId,
@@ -94,6 +95,74 @@ function createDailyTotals(
       valueKwh: roundKwh(valueKwh)
     }))
     .sort((left, right) => left.date.localeCompare(right.date));
+}
+
+function createMonthlyConsumption(
+  values: MeterValueRecord[],
+  now: Date
+): DashboardSummaryResponse["monthly"] {
+  const currentYear = now.getUTCFullYear();
+  const lastYear = currentYear - 1;
+  const currentMonth = now.getUTCMonth();
+  const thisYearTotals = Array.from({ length: 12 }, () => 0);
+  const lastYearTotals = Array.from({ length: 12 }, () => 0);
+  const thisYearHasData = Array.from({ length: 12 }, () => false);
+  const lastYearHasData = Array.from({ length: 12 }, () => false);
+  const currentYearDataDays = new Set<string>();
+
+  for (const value of values) {
+    const year = value.intervalStart.getUTCFullYear();
+    const month = value.intervalStart.getUTCMonth();
+
+    if (year === currentYear) {
+      thisYearTotals[month] = (thisYearTotals[month] ?? 0) + value.valueKwh;
+      thisYearHasData[month] = true;
+      currentYearDataDays.add(formatOsloDate(value.intervalStart));
+    }
+
+    if (year === lastYear) {
+      lastYearTotals[month] = (lastYearTotals[month] ?? 0) + value.valueKwh;
+      lastYearHasData[month] = true;
+    }
+  }
+
+  const thisYearTotal = thisYearTotals.reduce((total, value) => total + value, 0);
+  const averageDailyKwh =
+    currentYearDataDays.size > 0 ? thisYearTotal / currentYearDataDays.size : 0;
+
+  return monthLabels.map((label, index) => ({
+    estimatedKwh:
+      averageDailyKwh > 0 && index >= currentMonth
+        ? roundKwh(
+            index === currentMonth
+              ? (thisYearTotals[index] ?? 0)
+              : averageDailyKwh * daysInUtcMonth(currentYear, index)
+          )
+        : null,
+    label,
+    lastYearKwh: lastYearHasData[index] ? roundKwh(lastYearTotals[index] ?? 0) : null,
+    month: index + 1,
+    thisYearKwh: thisYearHasData[index] ? roundKwh(thisYearTotals[index] ?? 0) : null
+  }));
+}
+
+const monthLabels = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "Mai",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Okt",
+  "Nov",
+  "Des"
+];
+
+function daysInUtcMonth(year: number, monthIndex: number): number {
+  return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
 }
 
 function toDashboardMeterValue(

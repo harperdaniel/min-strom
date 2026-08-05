@@ -172,10 +172,8 @@ describe("api", () => {
       providerType: "ELVIA_TOKEN",
       status: "ACTIVE"
     });
-    expect(body.sync).toMatchObject({
-      meterPointCount: 1,
-      valueCount: 6
-    });
+    expect(body.sync.meterPointCount).toBe(1);
+    expect(body.sync.valueCount).toBeGreaterThan(6);
     expect(JSON.stringify(body)).not.toContain(token);
   });
 
@@ -202,6 +200,8 @@ describe("api", () => {
       name: "Hjemme"
     });
     expect(dashboard.hourly).toHaveLength(6);
+    expect(dashboard.monthly).toHaveLength(12);
+    expect(dashboard.monthly.some((month) => month.thisYearKwh !== null)).toBe(true);
     expect(dashboard.totals.todayKwh).toBeGreaterThan(0);
   });
 

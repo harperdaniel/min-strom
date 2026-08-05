@@ -1011,6 +1011,193 @@ h2 {
   color: var(--coral);
 }
 
+.year-chart-section {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 18px 44px rgba(17, 18, 74, 0.08);
+  margin-top: 30px;
+  padding: 24px;
+}
+
+.year-chart-heading {
+  align-items: center;
+  margin-bottom: 18px;
+}
+
+.chart-toolbar {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  justify-items: end;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.legend-item {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 0.82rem;
+  font-weight: 900;
+  gap: 7px;
+}
+
+.legend-item::before {
+  border-radius: 999px;
+  content: "";
+  height: 4px;
+  width: 22px;
+}
+
+.legend-item.this-year::before {
+  background: var(--coral);
+}
+
+.legend-item.last-year::before {
+  background: var(--sky-strong);
+}
+
+.legend-item.estimate::before {
+  background: var(--coral);
+  opacity: 0.45;
+}
+
+.chart-toggle {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  grid-template-columns: 1fr 1fr;
+  min-height: 42px;
+  padding: 4px;
+}
+
+.chart-toggle button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  display: inline-flex;
+  font-weight: 900;
+  gap: 7px;
+  justify-content: center;
+  min-width: 92px;
+  padding: 0 12px;
+}
+
+.chart-toggle button[aria-selected="true"] {
+  background: var(--paper);
+  box-shadow: 0 8px 18px rgba(17, 18, 74, 0.08);
+  color: var(--ink);
+}
+
+.year-chart-frame {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  min-height: 358px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 14px 14px 16px;
+}
+
+.year-chart-frame svg {
+  display: block;
+  height: 300px;
+  min-width: 660px;
+  overflow: visible;
+  width: 100%;
+}
+
+.chart-grid-line {
+  stroke: rgba(17, 18, 74, 0.1);
+  stroke-width: 1;
+}
+
+.chart-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 4;
+}
+
+.chart-line.this-year {
+  stroke: var(--coral);
+}
+
+.chart-line.last-year {
+  stroke: var(--sky-strong);
+}
+
+.chart-line.estimate {
+  stroke: var(--coral);
+  stroke-dasharray: 9 10;
+  stroke-width: 3.5;
+}
+
+.chart-point {
+  fill: var(--paper);
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+
+.chart-month-labels {
+  color: var(--muted);
+  display: grid;
+  font-size: 0.78rem;
+  font-weight: 850;
+  grid-template-columns: repeat(12, minmax(36px, 1fr));
+  min-width: 660px;
+  padding: 0 22px;
+  text-align: center;
+}
+
+.year-bars {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(12, minmax(34px, 1fr));
+  height: 300px;
+  min-width: 660px;
+  padding: 28px 18px 34px;
+}
+
+.year-bar-group {
+  align-items: end;
+  display: grid;
+  gap: 3px;
+  grid-template-columns: repeat(3, minmax(5px, 1fr));
+  height: 230px;
+}
+
+.year-bar {
+  border-radius: 8px 8px 0 0;
+  display: block;
+  height: var(--bar-height);
+  min-height: 2px;
+}
+
+.year-bar.this-year {
+  background: var(--coral);
+}
+
+.year-bar.last-year {
+  background: var(--sky-strong);
+}
+
+.year-bar.estimate {
+  background: var(--coral-pastel);
+  border: 2px dashed var(--coral);
+}
+
 .metric-grid {
   display: grid;
   gap: 16px;

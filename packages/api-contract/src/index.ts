@@ -159,6 +159,15 @@ export const dashboardSummaryResponseSchema = z.object({
     })
     .nullable(),
   hourly: z.array(meterValueSchema),
+  monthly: z.array(
+    z.object({
+      estimatedKwh: z.number().nonnegative().nullable(),
+      label: z.string(),
+      lastYearKwh: z.number().nonnegative().nullable(),
+      month: z.number().int().min(1).max(12),
+      thisYearKwh: z.number().nonnegative().nullable()
+    })
+  ),
   daily: z.array(
     z.object({
       date: z.string(),
